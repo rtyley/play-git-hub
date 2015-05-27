@@ -4,8 +4,6 @@ name := "play-git-hub"
 
 description := "Group of library code for Play, Git, and GitHub"
 
-version := "1.0-SNAPSHOT"
-
 scalaVersion := "2.11.6"
 
 libraryDependencies ++= Seq(
