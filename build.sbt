@@ -9,7 +9,7 @@ version := "1.0-SNAPSHOT"
 scalaVersion := "2.11.6"
 
 libraryDependencies ++= Seq(
-  "com.typesafe.play" %% "play" % "2.4.0-RC5",
+  "com.typesafe.play" %% "play" % "2.4.0",
   "org.kohsuke" % "github-api" % "1.68" exclude("org.jenkins-ci", "annotation-indexer"),
   "com.squareup.okhttp" % "okhttp" % "2.4.0",
   "com.squareup.okhttp" % "okhttp-urlconnection" % "2.4.0",
