@@ -23,7 +23,7 @@ scmInfo := Some(ScmInfo(
   "scm:git:git@github.com:rtyley/play-git-hub.git"
 ))
 
-licenses := Seq("GPLv3" -> url("http://www.gnu.org/licenses/gpl-3.0.html"))
+licenses := Seq("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0"))
 
 import ReleaseTransformations._
 
