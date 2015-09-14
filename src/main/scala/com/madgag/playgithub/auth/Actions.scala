@@ -16,8 +16,11 @@
 
 package com.madgag.playgithub.auth
 
-import com.madgag.playgithub.auth.AuthenticatedSessions.RedirectToPathAfterAuthKey
-import org.kohsuke.github.GitHub
+import java.nio.file.Path
+
+import com.madgag.github.GitHubCredentials
+import com.madgag.playgithub.auth.AuthenticatedSessions.{AccessToken, RedirectToPathAfterAuthKey}
+import org.kohsuke.github.{GitHubBuilder, GitHub}
 import play.api.mvc.Security.{AuthenticatedBuilder, AuthenticatedRequest}
 import play.api.mvc._
 
@@ -26,11 +29,13 @@ import scala.concurrent.Future
 
 object Actions {
 
-  type AuthRequest[A] = AuthenticatedRequest[A, GitHub]
+  type AuthRequest[A] = AuthenticatedRequest[A, GitHubCredentials]
 
-  def gitHubAuthenticatedAction(scopes: Seq[String])(implicit authClient: Client) =
+  private def gitHubAuthenticatedAction(scopes: Seq[String], workingDir: Path)(
+    implicit authClient: Client, accessTokenProvider: AccessToken.Provider, gitHubBuilder: GitHubBuilder = new GitHubBuilder
+  ) =
     new AuthenticatedBuilder(
-      AuthenticatedSessions.userGitHubConnectionOpt,
+      request => accessTokenProvider(request).flatMap(accessKey => GitHubCredentials.forAccessKey(accessKey, workingDir).toOption),
       implicit req => authClient.redirectForAuthWith(scopes).addingToSession(RedirectToPathAfterAuthKey -> req.path)
     )
 
@@ -38,7 +43,9 @@ object Actions {
     def transform[A](request: AuthRequest[A]) = Future.successful(new GHRequest[A](request.user, request))
   }
   
-  def githubAction(scopes: Seq[String])(implicit authClient: Client) =
-    gitHubAuthenticatedAction(scopes) andThen AuthenticatedActionToGHRequest
+  def gitHubAction(scopes: Seq[String], workingDir: Path)(
+    implicit authClient: Client, accessTokenProvider: AccessToken.Provider, gitHubBuilder: GitHubBuilder = new GitHubBuilder
+    ) =
+    gitHubAuthenticatedAction(scopes, workingDir) andThen AuthenticatedActionToGHRequest
 
 }

@@ -25,11 +25,22 @@ object AuthenticatedSessions {
 
   val RedirectToPathAfterAuthKey = "redirectToPathAfterAuth"
 
-  val AccessTokenKey = "githubAccessToken"
+  object AccessToken {
+    type Provider = RequestHeader => Option[String]
 
-  def userGitHubConnectionOpt(req: RequestHeader): Option[GitHub] = for {
-    accessToken <- req.session.get(AccessTokenKey)
-    gitHubConn <- Try(GitHub.connectUsingOAuth(accessToken)).toOption
-  } yield gitHubConn
+    val SessionKey = "githubAccessToken"
+
+    val FromSession: Provider = _.session.get(SessionKey)
+
+    val FromQueryString: Provider = _.getQueryString("access_token")
+
+    val FromBasicAuth: Provider = _.headers.get("Authorization").map(_.split(' ')(1))
+
+    def provider(providers: Provider*) = {
+      r : RequestHeader => providers.flatMap(_(r)).headOption
+    }
+  }
+
+
 
 }

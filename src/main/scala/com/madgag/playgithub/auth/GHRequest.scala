@@ -16,11 +16,15 @@
 
 package com.madgag.playgithub.auth
 
-import org.kohsuke.github.GitHub
+import com.madgag.github.GitHubCredentials
 import play.api.mvc._
 
-class GHRequest[A](val gitHub: GitHub, request: Request[A]) extends WrappedRequest[A](request) {
+class GHRequest[A](val gitHubCredentials: GitHubCredentials, request: Request[A]) extends WrappedRequest[A](request) {
+
+  val gitHub = gitHubCredentials.conn()
+
   val user = gitHub.getMyself
+
 }
 
 
