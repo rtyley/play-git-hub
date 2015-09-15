@@ -63,21 +63,22 @@ object GitHubCredentials {
         client
       }
 
-      GitHubCredentials(gitHubBuilderWithAccessKey, okHttpClient, new UsernamePasswordCredentialsProvider(accessKey, ""))
+      GitHubCredentials(accessKey, gitHubBuilderWithAccessKey, okHttpClient)
     }
   }
 }
 
 case class GitHubCredentials(
+  accessKey: String,
   gitHubBuilder: kohsuke.github.GitHubBuilder,
-  okHttpClient: OkHttpClient,
-  git: CredentialsProvider
+  okHttpClient: OkHttpClient
 ) {
 
   private val okHttpConnector = new OkHttpConnector(new OkUrlFactory(okHttpClient))
 
   def conn(): GitHub = {
-    gitHubBuilder.withConnector(okHttpConnector).build()
+    gitHubBuilder.withOAuthToken(accessKey).withConnector(okHttpConnector).build()
   }
 
+  lazy val git: CredentialsProvider = new UsernamePasswordCredentialsProvider(accessKey, "")
 }
