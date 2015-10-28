@@ -9,7 +9,7 @@ scalaVersion := "2.11.7"
 libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play" % "2.4.3",
   "org.kohsuke" % "github-api" % "1.70" exclude("org.jenkins-ci", "annotation-indexer"),
-  "com.squareup.okhttp" % "okhttp" % "2.4.0",
+  "com.squareup.okhttp" % "okhttp" % "2.5.0",
   "com.squareup.okhttp" % "okhttp-urlconnection" % "2.5.0",
   "com.madgag.scala-git" %% "scala-git" % "3.3",
   "com.madgag.scala-git" %% "scala-git-test" % "3.3" % "test"

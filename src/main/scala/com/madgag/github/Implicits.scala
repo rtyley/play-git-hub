@@ -16,6 +16,7 @@
 
 package com.madgag.github
 
+import com.madgag.email.Ident
 import com.madgag.git._
 import org.joda.time.DateTime
 import org.kohsuke.github._
@@ -34,10 +35,18 @@ object Implicits {
     }
   }
 
+  implicit class RichGitUser(user: GitUser) {
+
+    lazy val ident = Ident(user.getName, user.getEmail)
+
+  }
+
   implicit class RichGHMyself(myself: GHMyself) {
     private val emails = myself.getEmails2
 
     lazy val primaryEmail = emails.find(_.isPrimary).get
+
+    lazy val ident = Ident(myself.displayName, primaryEmail.getEmail)
 
     lazy val verifiedEmails: Seq[GHEmail] = emails.filter(_.isVerified)
   }
