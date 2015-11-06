@@ -19,11 +19,15 @@ package com.madgag
 import java.io.IOException
 
 import com.squareup.okhttp._
+import play.api.libs.json.JsValue
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
 
 package object okhttpscala {
+  implicit def jsonToRequestBody(json: JsValue): RequestBody = RequestBody.create(JsonMediaType, json.toString)
+
+  val JsonMediaType = MediaType.parse("application/json; charset=utf-8")
 
   val EmptyRequestBody = RequestBody.create(null, "")
 
