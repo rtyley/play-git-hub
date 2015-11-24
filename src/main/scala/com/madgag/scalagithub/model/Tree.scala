@@ -60,7 +60,7 @@ object Tree {
     path: String,
     mode: String,
     `type`: String,
-    size: Long,
+    size: Option[Long],
     sha: String,
     url: String
   )
