@@ -14,24 +14,23 @@
  * limitations under the License.
  */
 
-package com.madgag.playgithub.auth
+package com.madgag.scalagithub.model
 
-import com.madgag.scalagithub.{GitHub, GitHubCredentials}
-import play.api.mvc._
+import play.api.libs.json.Json
 
-import scala.concurrent.ExecutionContext.Implicits.global
-
-class GHRequest[A](val gitHubCredentials: GitHubCredentials, request: Request[A]) extends WrappedRequest[A](request) {
-
-  val gitHub = new GitHub(gitHubCredentials)
-
-  lazy val userF = gitHub.getUser().map(_.result)
-
-  lazy val userTeamsF = gitHub.getUserTeams()
-
+/*
+{
+  "url": "https://api.github.com/repos/octocat/Hello-World/labels/bug",
+  "name": "bug",
+  "color": "f29513"
 }
+ */
+case class Label(
+  url: String,
+  name: String,
+  color: String
+)
 
-
-
-
-
+object Label {
+  implicit val readsLabel = Json.reads[Label]
+}

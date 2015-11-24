@@ -14,20 +14,22 @@
  * limitations under the License.
  */
 
-package com.madgag.github
+package com.madgag.scalagithub.model
 
-object RepoId {
-  def from(fullName: String) = {
-    val parts = fullName.split('/')
-    require(parts.length == 2)
+import java.time.ZonedDateTime
 
-    RepoId(parts(0), parts(1))
-  }
-}
+import play.api.libs.json.Json
 
-case class RepoId(owner: String, name: String) {
+case class Comment(
+  id: Long,
+  url: String,
+  html_url: String,
+  body: String,
+  user: User,
+  created_at: ZonedDateTime,
+  updated_at: ZonedDateTime
+)
 
-  require(!Seq(owner, name).exists(p => p.isEmpty || p.contains('/')))
-
-  lazy val fullName = s"$owner/$name"
+object Comment {
+  implicit val readsComment = Json.reads[Comment]
 }

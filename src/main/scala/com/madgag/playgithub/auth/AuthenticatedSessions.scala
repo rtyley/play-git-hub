@@ -16,10 +16,7 @@
 
 package com.madgag.playgithub.auth
 
-import org.kohsuke.github.GitHub
 import play.api.mvc._
-
-import scala.util.Try
 
 object AuthenticatedSessions {
 
@@ -40,7 +37,5 @@ object AuthenticatedSessions {
       r : RequestHeader => providers.flatMap(_(r)).headOption
     }
   }
-
-
 
 }

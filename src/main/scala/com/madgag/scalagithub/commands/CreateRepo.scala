@@ -14,24 +14,18 @@
  * limitations under the License.
  */
 
-package com.madgag.playgithub.auth
+package com.madgag.scalagithub.commands
 
-import com.madgag.scalagithub.{GitHub, GitHubCredentials}
-import play.api.mvc._
+import play.api.libs.json.Json
 
-import scala.concurrent.ExecutionContext.Implicits.global
-
-class GHRequest[A](val gitHubCredentials: GitHubCredentials, request: Request[A]) extends WrappedRequest[A](request) {
-
-  val gitHub = new GitHub(gitHubCredentials)
-
-  lazy val userF = gitHub.getUser().map(_.result)
-
-  lazy val userTeamsF = gitHub.getUserTeams()
-
+case class CreateRepo(
+  name: String,
+  description: Option[String],
+  `private`: Boolean
+) {
+  val publicOrPrivateString = if (`private`) "private" else "public"
 }
 
-
-
-
-
+object CreateRepo {
+  implicit val writesCreateRepo = Json.writes[CreateRepo]
+}

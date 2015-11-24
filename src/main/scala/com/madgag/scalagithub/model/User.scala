@@ -14,24 +14,23 @@
  * limitations under the License.
  */
 
-package com.madgag.playgithub.auth
+package com.madgag.scalagithub.model
 
-import com.madgag.scalagithub.{GitHub, GitHubCredentials}
-import play.api.mvc._
+import play.api.libs.json.Json
 
-import scala.concurrent.ExecutionContext.Implicits.global
+case class User(
+  login: String,
+  id: Long,
+  avatar_url: String,
+  url: String,
+  html_url: String,
+  name: Option[String]
+) {
+  val atLogin = s"@$login"
 
-class GHRequest[A](val gitHubCredentials: GitHubCredentials, request: Request[A]) extends WrappedRequest[A](request) {
-
-  val gitHub = new GitHub(gitHubCredentials)
-
-  lazy val userF = gitHub.getUser().map(_.result)
-
-  lazy val userTeamsF = gitHub.getUserTeams()
-
+  lazy val displayName = name.filter(_.nonEmpty).getOrElse(atLogin)
 }
 
-
-
-
-
+object User {
+  implicit val readsUser = Json.reads[User]
+}

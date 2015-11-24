@@ -14,19 +14,16 @@
  * limitations under the License.
  */
 
-package com.madgag.github
+package com.madgag.scalagithub.model
 
-object PullRequestId {
-  def from(slug: String) = {
-    val parts = slug.split('/')
-    require(parts.length == 4)
-    require(parts(2) == "pull")
+import play.api.libs.json.Json
 
-    PullRequestId(RepoId(parts(0), parts(1)), parts(3).toInt)
-  }
+object Membership {
+  implicit val readsMembership = Json.reads[Membership]
 }
 
-
-case class PullRequestId(repo: RepoId, num: Int) {
-  lazy val slug = s"${repo.fullName}/pull/$num"
-}
+case class Membership(
+                       url: String,
+                       state: String,
+                       role: String
+                     )

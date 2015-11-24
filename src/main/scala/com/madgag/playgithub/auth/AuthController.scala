@@ -19,8 +19,9 @@ package com.madgag.playgithub.auth
 import com.madgag.github.GitHubAuthResponse
 import com.madgag.okhttpscala._
 import com.madgag.playgithub.auth.AuthenticatedSessions.AccessToken
+import com.madgag.scalagithub.{GitHub, GitHubCredentials}
 import com.squareup.okhttp
-import org.kohsuke.github._
+import com.squareup.okhttp.OkHttpClient
 import play.api.libs.json.Json
 import play.api.mvc._
 
@@ -43,12 +44,15 @@ trait AuthController extends Controller {
       .post(EmptyRequestBody)
       .build()
 
-    for (response <- client.execute(accessTokenRequest)) yield {
-      val accessToken = Json.parse(response.body.byteStream()).validate[GitHubAuthResponse].get.access_token
-      val user = GitHub.connectUsingOAuth(accessToken).getMyself
+    for {
+      response <- client.execute(accessTokenRequest)
+      accessToken = Json.parse(response.body.byteStream()).validate[GitHubAuthResponse].get.access_token
+      userResponse <- new GitHub(GitHubCredentials(accessToken, new OkHttpClient)).getUser()
+    } yield {
+      val user = userResponse.result
       Redirect(req.session.get(AuthenticatedSessions.RedirectToPathAfterAuthKey).getOrElse(defaultPage)).withSession(
         AccessToken.SessionKey -> accessToken,
-        MinimalGHPerson(user.getLogin, user.getAvatarUrl).sessionTuple
+        MinimalGHPerson(user.login, user.avatar_url).sessionTuple
       )
     }
   }
