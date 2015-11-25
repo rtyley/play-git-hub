@@ -59,7 +59,7 @@ case class Repo(
   trees_url: String,
   default_branch: String,
   `private`: Boolean,
-  permissions: Permissions
+  permissions: Option[Permissions]
 ) extends HasLabelsUrl {
   val repoId = RepoId.from(full_name)
 

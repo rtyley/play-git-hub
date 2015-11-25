@@ -24,7 +24,6 @@ import com.madgag.scalagithub.commands.{CreateComment, CreateLabel, CreateRepo}
 import com.madgag.scalagithub.model._
 import com.squareup.okhttp.Request.Builder
 import com.squareup.okhttp._
-import org.eclipse.jgit.lib.ObjectId
 import play.api.Logger
 import play.api.http.Status._
 import play.api.libs.json.Json.toJson
@@ -68,7 +67,6 @@ object GitHub {
   val JsonMediaType = MediaType.parse("application/json; charset=utf-8")
 
   private val AlwaysHitNetwork = new CacheControl.Builder().maxAge(0, SECONDS).build()
-
 
   private val IronmanPreview = "application/vnd.github.ironman-preview+json"
 
@@ -150,7 +148,9 @@ class GitHub(ghCredentials: GitHubCredentials) {
     */
   def replaceLabels(pr: PullRequest, labels: Seq[String])(implicit ec: EC): FR[Seq[Label]] = {
     // PUT /repos/:owner/:repo/issues/:number/labels
-    executeAndReadJson(addAuthAndCaching(new Builder().url(pr.labelsListUrl).put(toJson(labels))))
+    val respF = executeAndReadJson[Seq[Label]](addAuthAndCaching(new Builder().url(pr.labelsListUrl).put(toJson(labels))))
+    respF.foreach(resp => println(s"Sent labels = ${labels.mkString(",")} Got = ${resp.map(_.name).mkString(",")}"))
+    respF
   }
 
 
@@ -256,10 +256,11 @@ class GitHub(ghCredentials: GitHubCredentials) {
     executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
   }
 
-  def addAuthAndCaching(builder: Builder): Request = builder
-    .cacheControl(AlwaysHitNetwork)
+  def addAuthAndCaching(builder: Builder): Request =
+    addAuth(builder).cacheControl(AlwaysHitNetwork).build()
+
+  def addAuth(builder: Builder) = builder
     .addHeader("Authorization", s"token ${ghCredentials.accessKey}")
-    .build()
 
   def getUser()(implicit ec: EC): Future[GitHubResponse[User]] = {
     val url = apiUrlBuilder
@@ -311,7 +312,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
       val rateLimit = rateLimitFrom(response)
       val requestScopes = requestScopesFrom(response)
 
-      println(rateLimit+ " " + requestScopes + " " +request.httpUrl())
+      println(s"$rateLimit $requestScopes ${request.method} ${request.httpUrl}")
 
       val json = Json.parse(response.body().byteStream())
 
