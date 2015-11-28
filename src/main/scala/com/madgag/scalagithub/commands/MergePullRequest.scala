@@ -16,16 +16,15 @@
 
 package com.madgag.scalagithub.commands
 
+import org.eclipse.jgit.lib.ObjectId
 import play.api.libs.json.Json
+import com.madgag.scalagithub._
 
-case class CreateRepo(
-  name: String,
-  description: Option[String] = None,
-  `private`: Boolean
-) {
-  val publicOrPrivateString = if (`private`) "private" else "public"
-}
+case class MergePullRequest(
+  commit_message: Option[String] = None,
+  sha: Option[ObjectId] = None
+)
 
-object CreateRepo {
-  implicit val writesCreateRepo = Json.writes[CreateRepo]
+object MergePullRequest {
+  implicit val writesMergePullRequest = Json.writes[MergePullRequest]
 }

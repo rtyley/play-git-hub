@@ -19,16 +19,19 @@ package com.madgag.scalagithub.model
 import java.time.ZonedDateTime
 
 import com.madgag.git._
+import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.revwalk.RevWalk
 import play.api.libs.json.Json
 
+import com.madgag.scalagithub._
+
 case class CommitPointer(
   ref: String,
-  sha: String,
+  sha: ObjectId,
   user: User,
   repo: Repo
 ) {
-  def asRevCommit(implicit revWalk: RevWalk) = sha.asObjectId.asRevCommit
+  def asRevCommit(implicit revWalk: RevWalk) = sha.asRevCommit
 }
 
 object CommitPointer {
@@ -56,6 +59,7 @@ case class PullRequestId(repo: RepoId, num: Int) {
 
 case class PullRequest(
   number: Int,
+  url: String,
   html_url: String,
   user: User,
   title: String,
@@ -65,13 +69,30 @@ case class PullRequest(
   head: CommitPointer,
   base: CommitPointer,
   issue_url: String,
-  comments_url: String
+  comments_url: String,
+  comments: Int
 ) extends Commentable with HasLabelsList {
   val prId = PullRequestId(base.repo.repoId, number)
 
   val labelsListUrl = s"$issue_url/labels"
+
+  val mergeUrl = s"$url/merge"
 }
 
 object PullRequest {
+
+  /**
+    * https://developer.github.com/v3/pulls/#response-if-merge-was-successful
+    */
+  case class Merge(
+    sha: ObjectId,
+    merged: Boolean,
+    message: String
+  )
+
+  object Merge {
+    implicit val readsMerge = Json.reads[Merge]
+  }
+
   implicit val readsPullRequest = Json.reads[PullRequest]
 }

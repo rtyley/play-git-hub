@@ -16,8 +16,10 @@
 
 package com.madgag.scalagithub.model
 
-import org.eclipse.jgit.lib.ObjectId
+import com.madgag.scalagithub.GitHub
 import play.api.libs.json.Json
+
+import scala.concurrent.{ExecutionContext => EC, Future}
 
 object RepoId {
   def from(fullName: String) = {
@@ -42,6 +44,8 @@ trait HasLabelsList {
 trait HasLabelsUrl extends HasLabelsList {
   val labels_url: String
 
+  val labels = SuffixedEndpointHandler(labels_url, "name")
+
   val labelsListUrl = labels_url.stripSuffix("{/name}")
 }
 
@@ -49,6 +53,7 @@ trait HasLabelsUrl extends HasLabelsList {
 
 case class Repo(
   name: String,
+  url: String,
   full_name: String,
   html_url: String,
   clone_url: String,
@@ -56,6 +61,8 @@ case class Repo(
   labels_url: String,
   teams_url: String,
   git_refs_url: String,
+  pulls_url: String,
+  contents_url: String,
   trees_url: String,
   default_branch: String,
   `private`: Boolean,
@@ -65,11 +72,22 @@ case class Repo(
 
   val settingsUrl = s"$html_url/settings"
 
-  val refsListUrl = git_refs_url.stripSuffix("{/ref}")
-
-  def treeUrlFor(sha: String) = trees_url.replace("{/sha}", s"/$sha")
+  val trees = SuffixedEndpointHandler[String](trees_url, "/sha")
+  val refs = SuffixedEndpointHandler[String](git_refs_url, "/ref")
+  val pullRequests = SuffixedEndpointHandler[Int](pulls_url, "/number")
+  val contents = SuffixedEndpointHandler[String](contents_url, "+path")
 
   val collaborationSettingsUrl = s"$settingsUrl/collaboration"
+
+  def delete()(implicit gh: GitHub, ec: EC): Future[Boolean] = gh.deleteRepo(this)
+}
+
+case class SuffixedEndpointHandler[P](suffixedUrl: String, suffix: String) {
+  val encasedSuffix = s"{$suffix}"
+
+  def urlFor(p: P) = suffixedUrl.replace(encasedSuffix, s"/$p")
+
+  val listUrl = suffixedUrl.stripSuffix(encasedSuffix)
 }
 
 case class Permissions(

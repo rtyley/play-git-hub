@@ -16,7 +16,11 @@
 
 package com.madgag.scalagithub.model
 
+import org.eclipse.jgit.lib.ObjectId
 import play.api.libs.json.Json
+import com.madgag.git._
+
+import com.madgag.scalagithub._
 
 /*
 {
@@ -34,12 +38,14 @@ case class Ref(
   ref: String,
   url: String,
   `object`: Ref.Object
-)
+) {
+  val objectId = `object`.sha
+}
 
 object Ref {
   case class Object(
     `type`: String,
-    sha: String,
+    sha: ObjectId,
     url: String
   )
 

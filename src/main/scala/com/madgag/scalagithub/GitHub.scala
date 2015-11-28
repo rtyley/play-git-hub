@@ -20,7 +20,7 @@ import java.time.Instant
 import java.util.concurrent.TimeUnit.SECONDS
 
 import com.madgag.okhttpscala._
-import com.madgag.scalagithub.commands.{CreateComment, CreateLabel, CreateRepo}
+import com.madgag.scalagithub.commands._
 import com.madgag.scalagithub.model._
 import com.squareup.okhttp.Request.Builder
 import com.squareup.okhttp._
@@ -29,6 +29,7 @@ import play.api.http.Status._
 import play.api.libs.json.Json.toJson
 import play.api.libs.json._
 
+import scala.RuntimeException
 import scala.concurrent.{ExecutionContext => EC, Future}
 
 object RateLimit {
@@ -48,9 +49,37 @@ case class RequestScopes(
                           acceptedScopes: Set[String]
 )
 
+case class ResponseMeta(rateLimit: RateLimit, requestScopes: RequestScopes)
+
+object ResponseMeta {
+
+  def rateLimitStatusFrom(response: Response) = RateLimit.Status(
+    response.header("X-RateLimit-Remaining").toInt,
+    Instant.ofEpochSecond(response.header("X-RateLimit-Reset").toLong)
+  )
+
+  def rateLimitFrom(response: Response): RateLimit = {
+    val networkResponse = Option(response.networkResponse())
+    RateLimit(
+      consumed = if (networkResponse.exists(_.code != NOT_MODIFIED)) 1 else 0,
+      networkResponse.map(rateLimitStatusFrom)
+    )
+  }
+
+  def requestScopesFrom(response: Response) = RequestScopes(
+    response.header("X-OAuth-Scopes").split(',').map(_.trim).toSet,
+    response.header("X-Accepted-OAuth-Scopes").split(',').map(_.trim).toSet
+  )
+
+  def from(response: Response) = {
+    val rateLimit = rateLimitFrom(response)
+    val requestScopes = requestScopesFrom(response)
+    ResponseMeta(rateLimit, requestScopes)
+  }
+}
+
 case class GitHubResponse[Result](
-  rateLimit: RateLimit,
-  requestScopes: RequestScopes,
+  responseMeta: ResponseMeta,
   result: Result
 )
 
@@ -59,6 +88,9 @@ object GitHubResponse {
 }
 
 object GitHub {
+
+  val logger = Logger(getClass)
+
   type FR[A] = Future[GitHubResponse[A]]
 
   implicit def jsonToRequestBody(json: JsValue): RequestBody =
@@ -76,6 +108,31 @@ class GitHub(ghCredentials: GitHubCredentials) {
   import GitHub._
 
   /**
+    * https://developer.github.com/v3/repos/#create
+    */
+  def createRepo(repo: CreateRepo)(implicit ec: EC): FR[Repo] = {
+    val url = apiUrlBuilder
+      .addPathSegment("user")
+      .addPathSegment("repos")
+      .build()
+
+    executeAndReadJson(addAuth(new Builder().url(url).post(toJson(repo))).build)
+  }
+
+  /**
+    * https://developer.github.com/v3/repos/#create
+    */
+  def createOrgRepo(org: String, repo: CreateRepo)(implicit ec: EC): FR[Repo] = {
+    val url = apiUrlBuilder
+      .addPathSegment("orgs")
+      .addPathSegment(org)
+      .addPathSegment("repos")
+      .build()
+
+    executeAndReadJson(addAuth(new Builder().url(url).post(toJson(repo))).build)
+  }
+
+  /**
     * https://developer.github.com/v3/repos/#get
     */
   def getRepo(repoId: RepoId)(implicit ec: EC): FR[Repo] = {
@@ -89,6 +146,38 @@ class GitHub(ghCredentials: GitHubCredentials) {
     executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
   }
 
+  /**
+    * https://developer.github.com/v3/repos/#delete-a-repository
+    */
+  def deleteRepo(repo: Repo)(implicit ec: EC): Future[Boolean] = {
+    // DELETE /repos/:owner/:repo
+    ghCredentials.okHttpClient.execute(addAuth(new Builder().url(repo.url).delete()).build()).map(_.code() == 204)
+  }
+
+  /**
+    * https://developer.github.com/v3/repos/contents/#create-a-file
+    */
+  def createFile(repo: Repo, path: String, createFile: CreateFile)(implicit ec: EC): FR[Ref] = {
+    // PUT /repos/:owner/:repo/contents/:path
+    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.contents.urlFor(path)).put(toJson(createFile))))
+  }
+
+
+  /**
+    * https://developer.github.com/v3/git/refs/#create-a-reference
+    */
+  def createRef(repo: Repo, createRef: CreateRef)(implicit ec: EC): FR[Ref] = {
+    // POST /repos/:owner/:repo/git/refs
+    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.refs.listUrl).post(toJson(createRef))))
+  }
+
+  /**
+    * https://developer.github.com/v3/git/refs/#get-all-references
+    */
+  def listRefs(repo: Repo, prefix: Option[String] = None)(implicit ec: EC): FR[Seq[Ref]] = {
+    // GET /repos/:owner/:repo/git/refs/tags
+    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.refs.listUrl + prefix.mkString)))
+  }
 
   /**
     * https://developer.github.com/v3/git/refs/#get-a-reference
@@ -96,8 +185,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
   def getRef(repo: Repo, ref: String)(implicit ec: EC): FR[Ref] = {
     // GET /repos/:owner/:repo/git/refs/:ref
     // GET /repos/:owner/:repo/git/refs/heads/skunkworkz/featureA
-
-    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.refsListUrl + "/" + ref)))
+    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.refs.urlFor(ref))))
   }
 
   /**
@@ -108,7 +196,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
     // GET /repos/:owner/:repo/git/trees/:sha?recursive=1
     // GET /repos/guardian/membership-frontend/git/trees/heads/master?recursive=1 - undocumented, but works
 
-    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.treeUrlFor(sha)+"?recursive=1")))
+    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.trees.urlFor(sha)+"?recursive=1")))
   }
 
   /**
@@ -147,10 +235,23 @@ class GitHub(ghCredentials: GitHubCredentials) {
     * https://developer.github.com/v3/issues/labels/#replace-all-labels-for-an-issue
     */
   def replaceLabels(pr: PullRequest, labels: Seq[String])(implicit ec: EC): FR[Seq[Label]] = {
-    // PUT /repos/:owner/:repo/issues/:number/labels
-    val respF = executeAndReadJson[Seq[Label]](addAuthAndCaching(new Builder().url(pr.labelsListUrl).put(toJson(labels))))
-    respF.foreach(resp => println(s"Sent labels = ${labels.mkString(",")} Got = ${resp.map(_.name).mkString(",")}"))
-    respF
+    executeAndReadJson[Seq[Label]](addAuthAndCaching(new Builder().url(pr.labelsListUrl).put(toJson(labels))))
+  }
+
+  /**
+    * https://developer.github.com/v3/pulls/#get-a-single-pull-request
+    */
+  def getPullRequest(repo: Repo, number: Int)(implicit ec: EC): FR[PullRequest] = {
+    // GET /repos/:owner/:repo/pulls/:number
+    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.pullRequests.urlFor(number))))
+  }
+
+  /**
+    * https://developer.github.com/v3/pulls/#merge-a-pull-request-merge-button
+    */
+  def mergePullRequest(pullRequest: PullRequest, mergePullRequest: MergePullRequest)(implicit ec: EC): FR[PullRequest.Merge] = {
+    // PUT /repos/:owner/:repo/pulls/:number/merge
+    executeAndReadJson(addAuthAndCaching(new Builder().url(pullRequest.mergeUrl).put(toJson(mergePullRequest))))
   }
 
 
@@ -223,14 +324,17 @@ class GitHub(ghCredentials: GitHubCredentials) {
     executeAndReadJson(addAuthAndCaching(new Builder().url(repo.hooks_url)))
   }
 
+  /**
+    * https://developer.github.com/v3/orgs/teams/#get-team
+    */
   def getTeam(teamId: Long)(implicit ec: EC): FR[Team] = {
-    // GET /orgs/:org/memberships/:username
+    // GET /teams/:id
     val url = apiUrlBuilder
       .addPathSegment("teams")
       .addPathSegment(teamId.toString)
       .build()
 
-    executeAndReadJson[Team](addAuthAndCaching(new Builder().url(url)))
+    executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
   }
 
   def getMembership(org: String, username: String)(implicit ec: EC): FR[Membership] = {
@@ -270,6 +374,9 @@ class GitHub(ghCredentials: GitHubCredentials) {
     executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
   }
 
+  /**
+    * https://developer.github.com/v3/orgs/teams/#add-team-repo
+    */
   def addTeamRepo(teamId: Long, org: String, repoName: String)(implicit ec: EC) = {
     // curl -X PUT -H "Authorization: token $REPO_MAKER_GITHUB_ACCESS_TOKEN" -H "Accept: application/vnd.github.ironman-preview+json"
     // -d@bang2.json https://api.github.com/teams/1831886/repos/gu-who-demo-org/150b89c114a
@@ -287,63 +394,57 @@ class GitHub(ghCredentials: GitHubCredentials) {
       .put(Json.obj("permission" -> "admin"))))
   }
 
+
+  /*
+   * https://developer.github.com/v3/pulls/#create-a-pull-request
+   */
+  def createPullRequest(repo: Repo, createPullRequest: CreatePullRequest)(implicit ec: EC): FR[PullRequest] = {
+    // POST /repos/:owner/:repo/pulls
+    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.pullRequests.listUrl).post(toJson(createPullRequest))))
+  }
+
   /*
    * https://developer.github.com/v3/issues/comments/#create-a-comment
    */
   def createComment(commentable: Commentable, comment: String)(implicit ec: EC): FR[Comment] = {
     // POST /repos/:owner/:repo/issues/:number/comments
-    executeAndReadJson[Comment](addAuthAndCaching(new Builder().url(commentable.comments_url).post(toJson(CreateComment(comment)))))
+    executeAndReadJson(addAuthAndCaching(new Builder().url(commentable.comments_url).post(toJson(CreateComment(comment)))))
   }
 
-  def createOrgRepo(org: String, repo: CreateRepo)(implicit ec: EC): FR[Repo] = {
-    val url = apiUrlBuilder
-      .addPathSegment("orgs")
-      .addPathSegment(org)
-      .addPathSegment("repos")
-      .build()
-
-    executeAndReadJson(addAuthAndCaching(new Builder().url(url).post(toJson(repo))))
+  /**
+    * https://developer.github.com/v3/issues/comments/#list-comments-on-an-issue
+    */
+  def listComments(commentable: Commentable)(implicit ec: EC): FR[Seq[Comment]] = {
+    // GET /repos/:owner/:repo/issues/:number/comments TODO Pagination
+    executeAndReadJson(addAuthAndCaching(new Builder().url(commentable.comments_url).get()))
   }
 
   def executeAndReadJson[T](request: Request)(implicit ev: Reads[T], ec: EC): FR[T] = {
     for {
       response <- ghCredentials.okHttpClient.execute(request)
     } yield {
-      val rateLimit = rateLimitFrom(response)
-      val requestScopes = requestScopesFrom(response)
+      val meta = ResponseMeta.from(response)
+      logger.debug(s"${meta.rateLimit} ${request.method} ${request.httpUrl}")
 
-      println(s"$rateLimit $requestScopes ${request.method} ${request.httpUrl}")
-
-      val json = Json.parse(response.body().byteStream())
-
-      json.validate[T] match {
+      Json.parse(response.body().byteStream()).validate[T] match {
         case error: JsError =>
           val message = s"Error decoding ${request.urlString()} : $error"
-          Logger.warn(s"$message\n\n$json\n\n" )
+          Logger.warn(s"$message\n\n${Json.parse(response.body().byteStream())}\n\n" )
           throw new RuntimeException(message)
         case JsSuccess(result, _) =>
-          GitHubResponse(rateLimit, requestScopes, result)
+          GitHubResponse(meta, result)
       }
     }
   }
 
-  def rateLimitFrom[T](response: Response): RateLimit = {
-    val networkResponse = Option(response.networkResponse())
-    RateLimit(
-      consumed = if (networkResponse.exists(_.code != NOT_MODIFIED)) 1 else 0,
-      networkResponse.map(rateLimitStatusFrom)
-    )
-  }
-
   def apiUrlBuilder: HttpUrl.Builder = new HttpUrl.Builder().scheme("https").host("api.github.com")
 
-  def rateLimitStatusFrom(response: Response) = RateLimit.Status(
-    response.header("X-RateLimit-Remaining").toInt,
-    Instant.ofEpochSecond(response.header("X-RateLimit-Reset").toLong)
-  )
+}
 
-  def requestScopesFrom(response: Response) = RequestScopes(
-    response.header("X-OAuth-Scopes").split(',').map(_.trim).toSet,
-    response.header("X-Accepted-OAuth-Scopes").split(',').map(_.trim).toSet
-  )
+trait Thing[T, ID, CC] {
+  def create(cc: CC): Future[GitHubResponse[T]]
+
+  def list(): Future[GitHubResponse[Seq[T]]]
+
+  def get(id: ID): Future[GitHubResponse[T]]
 }

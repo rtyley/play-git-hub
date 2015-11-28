@@ -18,14 +18,13 @@ package com.madgag.scalagithub.commands
 
 import play.api.libs.json.Json
 
-case class CreateRepo(
-  name: String,
-  description: Option[String] = None,
-  `private`: Boolean
-) {
-  val publicOrPrivateString = if (`private`) "private" else "public"
-}
+case class CreatePullRequest(
+  title: String,
+  head: String,
+  base: String,
+  body: Option[String] = None
+)
 
-object CreateRepo {
-  implicit val writesCreateRepo = Json.writes[CreateRepo]
+object CreatePullRequest {
+  implicit val writesCreatePullRequest = Json.writes[CreatePullRequest]
 }

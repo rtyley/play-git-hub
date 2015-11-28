@@ -16,7 +16,10 @@
 
 package com.madgag.scalagithub.model
 
+import org.eclipse.jgit.lib.ObjectId
 import play.api.libs.json.Json
+
+import com.madgag.scalagithub._
 
 /*
 {
@@ -38,7 +41,7 @@ import play.api.libs.json.Json
 
 
 case class Tree(
-  sha: String,
+  sha: ObjectId,
   url: String,
   tree: Seq[Tree.Entry],
   truncated: Boolean
@@ -61,7 +64,7 @@ object Tree {
     mode: String,
     `type`: String,
     size: Option[Long],
-    sha: String,
+    sha: ObjectId,
     url: String
   )
 

@@ -16,16 +16,27 @@
 
 package com.madgag.scalagithub.commands
 
+import org.eclipse.jgit.lib.ObjectId
 import play.api.libs.json.Json
 
-case class CreateRepo(
-  name: String,
-  description: Option[String] = None,
-  `private`: Boolean
-) {
-  val publicOrPrivateString = if (`private`) "private" else "public"
-}
+import com.madgag.scalagithub._
 
-object CreateRepo {
-  implicit val writesCreateRepo = Json.writes[CreateRepo]
+/*
+{
+  "message": "my commit message",
+  "committer": {
+    "name": "Scott Chacon",
+    "email": "schacon@gmail.com"
+  },
+  "content": "bXkgbmV3IGZpbGUgY29udGVudHM="
+}
+ */
+case class CreateFile(
+  message: String,
+  content: String,
+  branch: Option[String] = None
+)
+
+object CreateFile {
+  implicit val writesCreateFile = Json.writes[CreateFile]
 }

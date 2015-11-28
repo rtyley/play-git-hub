@@ -16,16 +16,22 @@
 
 package com.madgag.scalagithub.commands
 
+import org.eclipse.jgit.lib.ObjectId
 import play.api.libs.json.Json
 
-case class CreateRepo(
-  name: String,
-  description: Option[String] = None,
-  `private`: Boolean
-) {
-  val publicOrPrivateString = if (`private`) "private" else "public"
-}
+import com.madgag.scalagithub._
 
-object CreateRepo {
-  implicit val writesCreateRepo = Json.writes[CreateRepo]
+/*
+{
+  "ref": "refs/heads/featureA",
+  "sha": "aa218f56b14c9653891f9e74264a383fa43fefbd"
+}
+ */
+case class CreateRef(
+  ref: String,
+  sha: ObjectId
+)
+
+object CreateRef {
+  implicit val writesCreateRef = Json.writes[CreateRef]
 }
