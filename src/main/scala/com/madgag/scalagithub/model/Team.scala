@@ -21,11 +21,13 @@ import play.api.libs.json.Json
 
 case class Team(
   id: Long,
+  url: String,
   name: String,
   slug: String,
   members_count: Int,
   organization: Team.Org
-) {
+) extends Deleteable // https://developer.github.com/v3/orgs/teams/#delete-team
+{
   val atSlug = "@" + slug
 }
 

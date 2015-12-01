@@ -421,7 +421,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
 
   def executeAndReadJson[T](request: Request)(implicit ev: Reads[T], ec: EC): FR[T] = {
     for {
-      response <- ghCredentials.okHttpClient.execute(request)
+      response <- execute(request)
     } yield {
       val meta = ResponseMeta.from(response)
       logger.debug(s"${meta.rateLimit} ${request.method} ${request.httpUrl}")
@@ -437,14 +437,9 @@ class GitHub(ghCredentials: GitHubCredentials) {
     }
   }
 
+  def execute[T](request: Request)(implicit ec: EC): Future[Response] =
+    ghCredentials.okHttpClient.execute(request)
+
   def apiUrlBuilder: HttpUrl.Builder = new HttpUrl.Builder().scheme("https").host("api.github.com")
 
-}
-
-trait Thing[T, ID, CC] {
-  def create(cc: CC): Future[GitHubResponse[T]]
-
-  def list(): Future[GitHubResponse[Seq[T]]]
-
-  def get(id: ID): Future[GitHubResponse[T]]
 }

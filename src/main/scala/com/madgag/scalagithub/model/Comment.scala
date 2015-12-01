@@ -28,7 +28,7 @@ case class Comment(
   user: User,
   created_at: ZonedDateTime,
   updated_at: ZonedDateTime
-)
+) extends Deleteable // https://developer.github.com/v3/issues/comments/#delete-a-comment
 
 object Comment {
   implicit val readsComment = Json.reads[Comment]

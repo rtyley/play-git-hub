@@ -38,7 +38,12 @@ import play.api.libs.json.Json
   "created_at": "2011-09-06T17:26:27Z"
 }
  */
-case class Hook(id: Int, url: String, active: Boolean, config: Map[String, String])
+case class Hook(
+  id: Int,
+  url: String,
+  active: Boolean,
+  config: Map[String, String]
+) extends Deleteable // https://developer.github.com/v3/repos/hooks/#delete-a-hook
 
 object Hook {
   implicit val readsHook = Json.reads[Hook]

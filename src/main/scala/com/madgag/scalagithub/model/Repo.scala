@@ -17,9 +17,12 @@
 package com.madgag.scalagithub.model
 
 import com.madgag.scalagithub.GitHub
-import play.api.libs.json.Json
+import com.madgag.scalagithub.commands.{CreatePullRequest, CreateRef}
+import com.squareup.okhttp.Request.Builder
+import play.api.libs.json.Json._
+import play.api.libs.json.{Json, Reads, Writes}
 
-import scala.concurrent.{ExecutionContext => EC, Future}
+import scala.concurrent.{ExecutionContext => EC}
 
 object RepoId {
   def from(fullName: String) = {
@@ -50,7 +53,6 @@ trait HasLabelsUrl extends HasLabelsList {
 }
 
 
-
 case class Repo(
   name: String,
   url: String,
@@ -67,22 +69,88 @@ case class Repo(
   default_branch: String,
   `private`: Boolean,
   permissions: Option[Permissions]
-) extends HasLabelsUrl {
+) extends HasLabelsUrl
+  with Deleteable // https://developer.github.com/v3/repos/#delete-a-repository
+{
   val repoId = RepoId.from(full_name)
+
+  val trees = SuffixedEndpointHandler[String](trees_url, "/sha")
+  val contents = SuffixedEndpointHandler[String](contents_url, "+path")
+
+  val refs = SuffixedEndpointHandler[String](git_refs_url, "/ref")
+  val pullRequests = SuffixedEndpointHandler[Int](pulls_url, "/number")
+
+  val hooks: Link[Int] = ???
+
+  val refs2 = new Boomer[Ref, String](refs)
+    with CanCreate[Ref, String, CreateRef] // https://developer.github.com/v3/git/refs/#create-a-reference
+    with CanGet[Ref, String] // https://developer.github.com/v3/git/refs/#get-a-reference
+
+  val pullRequests2 = new Boomer[PullRequest, Int](pullRequests)
+    with CanCreate[PullRequest, Int, CreatePullRequest] // https://developer.github.com/v3/pulls/#create-a-pull-request
+    with CanGet[PullRequest, Int] // https://developer.github.com/v3/pulls/#get-a-single-pull-request
+
+  val hooks2 = new Boomer[Hook, Int](hooks)
+    with CanGet[Hook, Int] // https://developer.github.com/v3/repos/hooks/#get-single-hook
+
 
   val settingsUrl = s"$html_url/settings"
 
-  val trees = SuffixedEndpointHandler[String](trees_url, "/sha")
-  val refs = SuffixedEndpointHandler[String](git_refs_url, "/ref")
-  val pullRequests = SuffixedEndpointHandler[Int](pulls_url, "/number")
-  val contents = SuffixedEndpointHandler[String](contents_url, "+path")
-
   val collaborationSettingsUrl = s"$settingsUrl/collaboration"
-
-  def delete()(implicit gh: GitHub, ec: EC): Future[Boolean] = gh.deleteRepo(this)
 }
 
-case class SuffixedEndpointHandler[P](suffixedUrl: String, suffix: String) {
+
+
+class Boomer[T, ID](val link: Link[ID])(implicit val readsT: Reads[T]) {
+
+  def list()(implicit g: GitHub, ec: EC): GitHub.FR[Seq[T]] = {
+    g.executeAndReadJson[Seq[T]](g.addAuthAndCaching(new Builder().url(link.listUrl)))
+  }
+}
+
+trait CanCreate[T, ID, CC] {
+
+  val link: Link[ID]
+
+  import GitHub._
+
+  def create(cc: CC)(implicit g: GitHub, ec: EC, wCC: Writes[CC], rT: Reads[T]): FR[T] = {
+    g.executeAndReadJson[T](g.addAuth(new Builder().url(link.listUrl).post(toJson(cc))).build())
+  }
+}
+
+trait CanGet[T, ID] {
+
+  val link: Link[ID]
+
+  implicit val readsT: Reads[T]
+
+  import GitHub._
+
+  def get(id: ID)(implicit g: GitHub, ec: EC): FR[T] = {
+    g.executeAndReadJson(g.addAuthAndCaching(new Builder().url(link.urlFor(id))))
+  }
+}
+
+trait CanReplace[T, ID] {
+
+  val link: Link[ID]
+
+  implicit val readsT: Reads[T]
+
+  import GitHub._
+
+  def replace(ids: Seq[ID])(implicit g: GitHub, ec: EC, w: Writes[ID]): FR[Seq[T]] = {
+    g.executeAndReadJson[Seq[T]](g.addAuth(new Builder().url(link.listUrl).put(toJson(ids))).build())
+  }
+}
+
+trait Link[P] {
+  def urlFor(p: P): String
+  val listUrl: String
+}
+
+case class SuffixedEndpointHandler[P](suffixedUrl: String, suffix: String) extends Link[P] {
   val encasedSuffix = s"{$suffix}"
 
   def urlFor(p: P) = suffixedUrl.replace(encasedSuffix, s"/$p")

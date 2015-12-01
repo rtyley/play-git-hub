@@ -19,11 +19,20 @@ package com.madgag.scalagithub.model
 import java.time.ZonedDateTime
 
 import com.madgag.git._
+import com.madgag.scalagithub.GitHub
+import com.madgag.scalagithub.GitHub.{FR, _}
+import com.madgag.scalagithub.commands.{CreateComment, MergePullRequest}
+import com.squareup.okhttp.Request.Builder
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.revwalk.RevWalk
-import play.api.libs.json.Json
+import play.api.libs.json.{Reads, Json}
+import play.api.libs.json.Json._
 
+import scala.concurrent.{ExecutionContext => EC}
+
+import GitHub._
 import com.madgag.scalagithub._
+
 
 case class CommitPointer(
   ref: String,
@@ -40,6 +49,16 @@ object CommitPointer {
 
 trait Commentable {
   val comments_url: String
+
+  val fullComments: Link[Long] = new Link[Long] {
+    override def urlFor(p: Long): String = s"$comments_url/$p"
+
+    override val listUrl: String = comments_url
+  }
+
+  val comments2 = new Boomer[Comment, Long](fullComments)
+    with CanCreate[Comment, Long, CreateComment] // https://developer.github.com/v3/issues/comments/#create-a-comment
+    with CanGet[Comment, Long] // https://developer.github.com/v3/issues/comments/#get-a-single-comment
 }
 
 object PullRequestId {
@@ -55,6 +74,10 @@ object PullRequestId {
 
 case class PullRequestId(repo: RepoId, num: Int) {
   lazy val slug = s"${repo.fullName}/pull/$num"
+}
+
+trait Createable {
+  type Creation
 }
 
 case class PullRequest(
@@ -76,7 +99,22 @@ case class PullRequest(
 
   val labelsListUrl = s"$issue_url/labels"
 
+  val labels: Link[String] = ???
+
+  // You can't 'get' a label for an Issue - the label is 'got' from a Repo
+  val labels2 = new Boomer[Label, String](labels)
+    with CanReplace[Label, String] // https://developer.github.com/v3/issues/labels/#replace-all-labels-for-an-issue
+  // support add / remove ?
+
   val mergeUrl = s"$url/merge"
+
+  /**
+    * https://developer.github.com/v3/pulls/#merge-a-pull-request-merge-button
+    */
+  def merge(mergePullRequest: MergePullRequest)(implicit g: GitHub, ec: EC): FR[PullRequest.Merge] = {
+    // PUT /repos/:owner/:repo/pulls/:number/merge
+    g.executeAndReadJson(g.addAuth(new Builder().url(mergeUrl).put(toJson(mergePullRequest))).build())
+  }
 }
 
 object PullRequest {
@@ -91,7 +129,7 @@ object PullRequest {
   )
 
   object Merge {
-    implicit val readsMerge = Json.reads[Merge]
+    implicit val readsMerge: Reads[Merge] = Json.reads[Merge]
   }
 
   implicit val readsPullRequest = Json.reads[PullRequest]
