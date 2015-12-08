@@ -157,11 +157,10 @@ class GitHub(ghCredentials: GitHubCredentials) {
   /**
     * https://developer.github.com/v3/repos/contents/#create-a-file
     */
-  def createFile(repo: Repo, path: String, createFile: CreateFile)(implicit ec: EC): FR[Ref] = {
+  def createFile(repo: Repo, path: String, createFile: CreateFile)(implicit ec: EC): FR[ContentCommit] = {
     // PUT /repos/:owner/:repo/contents/:path
-    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.contents.urlFor(path)).put(toJson(createFile))))
+    executeAndReadJson[ContentCommit](addAuthAndCaching(new Builder().url(repo.contents.urlFor(path)).put(toJson(createFile))))
   }
-
 
   /**
     * https://developer.github.com/v3/git/refs/#create-a-reference
@@ -210,32 +209,6 @@ class GitHub(ghCredentials: GitHubCredentials) {
       .build()
 
     executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
-  }
-
-
-
-  /*
-  https://developer.github.com/v3/issues/labels/#list-all-labels-for-this-repository
-   */
-  def listLabels(hasLabelsList: HasLabelsList)(implicit ec: EC): FR[Seq[Label]] = {
-    // GET /repos/:owner/:repo/labels
-    // TODO Pagination: https://developer.github.com/guides/traversing-with-pagination/
-    executeAndReadJson(addAuthAndCaching(new Builder().url(hasLabelsList.labelsListUrl)))
-  }
-
-  /*
-   * https://developer.github.com/v3/issues/labels/#create-a-label
-   */
-  def createLabel(repo: Repo, label: CreateLabel)(implicit ec: EC): FR[Label] = {
-    // POST /repos/:owner/:repo/labels
-    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.labelsListUrl).post(toJson(label))))
-  }
-
-  /**
-    * https://developer.github.com/v3/issues/labels/#replace-all-labels-for-an-issue
-    */
-  def replaceLabels(pr: PullRequest, labels: Seq[String])(implicit ec: EC): FR[Seq[Label]] = {
-    executeAndReadJson[Seq[Label]](addAuthAndCaching(new Builder().url(pr.labelsListUrl).put(toJson(labels))))
   }
 
   /**

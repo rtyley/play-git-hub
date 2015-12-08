@@ -22,6 +22,7 @@ import com.madgag.git._
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.{FR, _}
 import com.madgag.scalagithub.commands.{CreateComment, MergePullRequest}
+import com.madgag.scalagithub.model.Link.fromListUrl
 import com.squareup.okhttp.Request.Builder
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.revwalk.RevWalk
@@ -50,15 +51,12 @@ object CommitPointer {
 trait Commentable {
   val comments_url: String
 
-  val fullComments: Link[Long] = new Link[Long] {
-    override def urlFor(p: Long): String = s"$comments_url/$p"
-
-    override val listUrl: String = comments_url
-  }
+  val fullComments: Link[Long] = fromListUrl(comments_url)
 
   val comments2 = new Boomer[Comment, Long](fullComments)
-    with CanCreate[Comment, Long, CreateComment] // https://developer.github.com/v3/issues/comments/#create-a-comment
-    with CanGet[Comment, Long] // https://developer.github.com/v3/issues/comments/#get-a-single-comment
+    with CanGetAndCreate[Comment, Long, CreateComment]
+  // https://developer.github.com/v3/issues/comments/#get-a-single-comment
+  // https://developer.github.com/v3/issues/comments/#create-a-comment
 }
 
 object PullRequestId {
@@ -94,12 +92,10 @@ case class PullRequest(
   issue_url: String,
   comments_url: String,
   comments: Int
-) extends Commentable with HasLabelsList {
+) extends Commentable with HasLabels {
   val prId = PullRequestId(base.repo.repoId, number)
 
-  val labelsListUrl = s"$issue_url/labels"
-
-  val labels: Link[String] = ???
+  val labels: Link[String] = fromListUrl(s"$issue_url/labels")
 
   // You can't 'get' a label for an Issue - the label is 'got' from a Repo
   val labels2 = new Boomer[Label, String](labels)
