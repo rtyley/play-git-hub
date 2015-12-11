@@ -31,6 +31,7 @@ import play.api.libs.json._
 
 import scala.RuntimeException
 import scala.concurrent.{ExecutionContext => EC, Future}
+import scala.util.{Failure, Try}
 
 object RateLimit {
   case class Status(
@@ -162,30 +163,6 @@ class GitHub(ghCredentials: GitHubCredentials) {
     executeAndReadJson[ContentCommit](addAuthAndCaching(new Builder().url(repo.contents.urlFor(path)).put(toJson(createFile))))
   }
 
-  /**
-    * https://developer.github.com/v3/git/refs/#create-a-reference
-    */
-  def createRef(repo: Repo, createRef: CreateRef)(implicit ec: EC): FR[Ref] = {
-    // POST /repos/:owner/:repo/git/refs
-    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.refs.listUrl).post(toJson(createRef))))
-  }
-
-  /**
-    * https://developer.github.com/v3/git/refs/#get-all-references
-    */
-  def listRefs(repo: Repo, prefix: Option[String] = None)(implicit ec: EC): FR[Seq[Ref]] = {
-    // GET /repos/:owner/:repo/git/refs/tags
-    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.refs.listUrl + prefix.mkString)))
-  }
-
-  /**
-    * https://developer.github.com/v3/git/refs/#get-a-reference
-    */
-  def getRef(repo: Repo, ref: String)(implicit ec: EC): FR[Ref] = {
-    // GET /repos/:owner/:repo/git/refs/:ref
-    // GET /repos/:owner/:repo/git/refs/heads/skunkworkz/featureA
-    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.refs.urlFor(ref))))
-  }
 
   /**
     * https://developer.github.com/v3/git/trees/#get-a-tree-recursively
@@ -210,40 +187,6 @@ class GitHub(ghCredentials: GitHubCredentials) {
 
     executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
   }
-
-  /**
-    * https://developer.github.com/v3/pulls/#get-a-single-pull-request
-    */
-  def getPullRequest(repo: Repo, number: Int)(implicit ec: EC): FR[PullRequest] = {
-    // GET /repos/:owner/:repo/pulls/:number
-    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.pullRequests.urlFor(number))))
-  }
-
-  /**
-    * https://developer.github.com/v3/pulls/#merge-a-pull-request-merge-button
-    */
-  def mergePullRequest(pullRequest: PullRequest, mergePullRequest: MergePullRequest)(implicit ec: EC): FR[PullRequest.Merge] = {
-    // PUT /repos/:owner/:repo/pulls/:number/merge
-    executeAndReadJson(addAuthAndCaching(new Builder().url(pullRequest.mergeUrl).put(toJson(mergePullRequest))))
-  }
-
-
-  def listPullRequests(repoId: RepoId)(implicit ec: EC): FR[Seq[PullRequest]] = {
-    // https://api.github.com/repos/guardian/subscriptions-frontend/pulls?state=closed&sort=updated&direction=desc
-    val url = apiUrlBuilder
-      .addPathSegment(s"repos")
-      .addPathSegment(repoId.owner)
-      .addPathSegment(repoId.name)
-      .addPathSegment(s"pulls")
-      .addQueryParameter("state", "closed")
-      .addQueryParameter("sort", "updated")
-      .addQueryParameter("direction", "desc")
-      .build()
-
-    // TODO Pagination: https://developer.github.com/guides/traversing-with-pagination/
-    executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
-  }
-
 
   def checkMembership(org: String, username: String)(implicit ec: EC): Future[Boolean] = {
     //GET /orgs/:org/members/:username
@@ -367,15 +310,6 @@ class GitHub(ghCredentials: GitHubCredentials) {
       .put(Json.obj("permission" -> "admin"))))
   }
 
-
-  /*
-   * https://developer.github.com/v3/pulls/#create-a-pull-request
-   */
-  def createPullRequest(repo: Repo, createPullRequest: CreatePullRequest)(implicit ec: EC): FR[PullRequest] = {
-    // POST /repos/:owner/:repo/pulls
-    executeAndReadJson(addAuthAndCaching(new Builder().url(repo.pullRequests.listUrl).post(toJson(createPullRequest))))
-  }
-
   /*
    * https://developer.github.com/v3/issues/comments/#create-a-comment
    */
@@ -397,12 +331,22 @@ class GitHub(ghCredentials: GitHubCredentials) {
       response <- execute(request)
     } yield {
       val meta = ResponseMeta.from(response)
-      logger.debug(s"${meta.rateLimit} ${request.method} ${request.httpUrl}")
+      logger.debug(s"${meta.rateLimit} ${response.code} ${request.method} ${request.httpUrl}")
 
-      Json.parse(response.body().byteStream()).validate[T] match {
+      val responseBody = response.body()
+
+  //    logger.debug(s"contentLength = ${responseBody.contentLength}")
+
+      //      logger.debug(s"byteStream = $byteStream")
+
+      val json = Json.parse(responseBody.byteStream())
+
+      logger.debug(s"json = ${json.toString.take(40)}")
+
+      json.validate[T] match {
         case error: JsError =>
-          val message = s"Error decoding ${request.urlString()} : $error"
-          Logger.warn(s"$message\n\n${Json.parse(response.body().byteStream())}\n\n" )
+          val message = s"Error decoding ${request.httpUrl} : $error"
+          logger.warn(s"$message\n\n$json\n\n" )
           throw new RuntimeException(message)
         case JsSuccess(result, _) =>
           GitHubResponse(meta, result)
