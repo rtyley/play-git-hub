@@ -19,12 +19,11 @@ package com.madgag.scalagithub.model
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.commands._
-import com.madgag.scalagithub.model.ContentCommit.readsContentCommit
 import com.squareup.okhttp.Request.Builder
 import play.api.libs.json.Json._
 import play.api.libs.json.{Json, Reads, Writes}
 
-import scala.concurrent.{ExecutionContext => EC, Future}
+import scala.concurrent.{ExecutionContext => EC}
 
 object RepoId {
   def from(fullName: String) = {
@@ -40,12 +39,6 @@ case class RepoId(owner: String, name: String) {
   require(!Seq(owner, name).exists(p => p.isEmpty || p.contains('/')))
 
   lazy val fullName = s"$owner/$name"
-}
-
-trait HasLabels {
-  val labels: Link[String]
-
-  val labels2: CanList[Label, String]
 }
 
 case class Repo(
@@ -65,44 +58,36 @@ case class Repo(
   default_branch: String,
   `private`: Boolean,
   permissions: Option[Permissions]
-) extends HasLabels
-  with Deleteable // https://developer.github.com/v3/repos/#delete-a-repository
+) extends Deleteable // https://developer.github.com/v3/repos/#delete-a-repository
 {
   val repoId = RepoId.from(full_name)
-
-  override val labels: Link[String] = Link.fromSuffixedUrl(labels_url, "/name")
 
   val trees = Link.fromSuffixedUrl[String](trees_url, "/sha")
   val contents = Link.fromSuffixedUrl[String](contents_url, "+path")
 
   val commits = Link.fromSuffixedUrl[String](commits_url, "/sha")
 
-  val refs = Link.fromSuffixedUrl[String](git_refs_url, "/ref")
-  val pullRequests = Link.fromSuffixedUrl[Int](pulls_url, "/number")
-
-  val hooks: Link[Int] = Link.fromListUrl(hooks_url)
-
   val trees2 = new Repo.Trees(trees)
 
-  val refs2 = new Boomer[Ref, String](refs)
-    with CanGetAndCreate[Ref, String, CreateRef]
+  val refs = new CCreator[Ref, String, CreateRef](Link.fromSuffixedUrl(git_refs_url, "/sha"))
+    with CanGetAndList[Ref, String]
   // https://developer.github.com/v3/git/refs/#get-a-reference
   // https://developer.github.com/v3/git/refs/#create-a-reference
 
-  val pullRequests2 = new Boomer[PullRequest, Int](pullRequests)
-    with CanGetAndCreate[PullRequest, Int, CreatePullRequest]
+  val pullRequests = new CCreator[PullRequest, Int, CreatePullRequest](Link.fromSuffixedUrl(pulls_url, "/number"))
+    with CanGetAndList[PullRequest, Int]
   // https://developer.github.com/v3/pulls/#create-a-pull-request
   // https://developer.github.com/v3/pulls/#get-a-single-pull-request
 
-  val hooks2 = new Boomer[Hook, Int](hooks)
-    with CanGet[Hook, Int] // https://developer.github.com/v3/repos/hooks/#get-single-hook
+  val hooks = new CReader[Hook, Int](Link.fromListUrl(hooks_url))
+    with CanGetAndList[Hook, Int] // https://developer.github.com/v3/repos/hooks/#get-single-hook
 
   val contents2 = new CanPut[ContentCommit, String, CreateFile] {
     override val link: Link[String] = Link.fromListUrl(contents_url)
   }
 
-  val labels2 = new Boomer[Label, String](labels)
-    with CanGetAndCreate[Label, String, CreateLabel]
+  val labels = new CCreator[Label, String, CreateLabel](Link.fromSuffixedUrl(labels_url, "/name"))
+    with CanGetAndList[Label, String]
   // https://developer.github.com/v3/issues/labels/#get-a-single-label
   // https://developer.github.com/v3/issues/labels/#create-a-label
 
@@ -115,19 +100,21 @@ case class Repo(
   val collaborationSettingsUrl = s"$settingsUrl/collaboration"
 }
 
-import GitHub._
+import com.madgag.scalagithub.GitHub._
 
 trait Reader[T] {
-  implicit val readsT: Reads[T] = implicitly[Reads[T]]
 }
 
 trait Writer[T, CC] extends Reader[T] {
-  implicit val writesCC: Writes[CC] = implicitly[Writes[CC]]
 }
 
-class Boomer[T, ID](val link: Link[ID]) extends CanList[T, ID]
+class CReader[T, ID](val link: Link[ID])(implicit val readsT: Reads[T])
+
+class CCreator[T, ID, CC](val link: Link[ID]) extends CanCreate[T, ID, CC]
 
 trait CanGetAndCreate[T, ID, CC] extends CanCreate[T, ID, CC] with CanGet[T, ID]
+
+trait CanGetAndList[T, ID] extends CanGet[T, ID] with CanList[T, ID]
 
 trait CanCreate[T, ID, CC] extends Writer[T, CC] {
 
@@ -156,12 +143,13 @@ trait CanList[T, ID] extends Reader[T] {
   }
 }
 
-trait CanGet[T, ID] extends Reader[T] {
+
+trait CanGet[T] extends Reader[T] {
 
   val link: Link[ID]
 
   def get(id: ID)(implicit g: GitHub, ec: EC): FR[T] = {
-    g.executeAndReadJson(g.addAuthAndCaching(new Builder().url(link.urlFor(id))))
+    g.executeAndReadJson[T](g.addAuthAndCaching(new Builder().url(link.urlFor(id))))
   }
 }
 
@@ -211,9 +199,7 @@ object Permissions {
 
 object Repo {
 
-  class Trees(suppliedLink: Link[String]) extends CanGetAndCreate[Tree, String, CreateTree] {
-
-    override val link: Link[String] = suppliedLink
+  class Trees(suppliedLink: Link[String]) extends CCreator[Tree, String, CreateTree](suppliedLink) with CanGetAndCreate[Tree, String, CreateTree] {
 
     // https://developer.github.com/v3/git/trees/#get-a-tree
     // https://developer.github.com/v3/git/trees/#create-a-tree
