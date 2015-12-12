@@ -51,10 +51,8 @@ object CommitPointer {
 trait Commentable {
   val comments_url: String
 
-  val fullComments: Link[Long] = fromListUrl(comments_url)
-
-  val comments2 = new Boomer[Comment, Long](fullComments)
-    with CanGetAndCreate[Comment, Long, CreateComment]
+  val comments2 = new CCreator[Comment, Long, CreateComment](fromListUrl(comments_url))
+    with CanGetAndList[Comment, Long]
   // https://developer.github.com/v3/issues/comments/#get-a-single-comment
   // https://developer.github.com/v3/issues/comments/#create-a-comment
 }
@@ -84,7 +82,7 @@ case class PullRequest(
   html_url: String,
   user: User,
   title: String,
-  body: String,
+  body: Option[String],
   merged_at: Option[ZonedDateTime],
   merged_by: Option[User],
   head: CommitPointer,
@@ -92,13 +90,12 @@ case class PullRequest(
   issue_url: String,
   comments_url: String,
   comments: Int
-) extends Commentable with HasLabels {
+) extends Commentable {
   val prId = PullRequestId(base.repo.repoId, number)
 
-  val labels: Link[String] = fromListUrl(s"$issue_url/labels")
-
   // You can't 'get' a label for an Issue - the label is 'got' from a Repo
-  val labels2 = new Boomer[Label, String](labels)
+  val labels = new CReader[Label, String](fromListUrl(s"$issue_url/labels"))
+    with CanList[Label, String]
     with CanReplace[Label, String] // https://developer.github.com/v3/issues/labels/#replace-all-labels-for-an-issue
   // support add / remove ?
 
