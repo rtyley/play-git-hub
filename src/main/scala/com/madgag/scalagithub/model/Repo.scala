@@ -19,6 +19,7 @@ package com.madgag.scalagithub.model
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.commands._
+import com.squareup.okhttp.HttpUrl
 import com.squareup.okhttp.Request.Builder
 import play.api.libs.json.Json._
 import play.api.libs.json.{Json, Reads, Writes}
@@ -84,6 +85,8 @@ case class Repo(
 
   val contents2 = new CanPut[ContentCommit, String, CreateFile] {
     override val link: Link[String] = Link.fromListUrl(contents_url)
+    override implicit val writesCC: Writes[CreateFile] = CreateFile.writesCreateFile
+    override implicit val readsT: Reads[ContentCommit] = ContentCommit.readsContentCommit
   }
 
   val labels = new CCreator[Label, String, CreateLabel](Link.fromSuffixedUrl(labels_url, "/name"))
@@ -103,16 +106,19 @@ case class Repo(
 import com.madgag.scalagithub.GitHub._
 
 trait Reader[T] {
-  implicit val readsT: Reads[T] = implicitly[Reads[T]]
+  implicit val readsT: Reads[T]
 }
 
 trait Writer[T, CC] extends Reader[T] {
-  implicit val writesCC: Writes[CC] = implicitly[Writes[CC]]
+  implicit val writesCC: Writes[CC]
 }
 
-class CReader[T, ID](val link: Link[ID])(implicit val readsT: Reads[T])
+class CReader[T, ID](val link: Link[ID])(implicit override val readsT: Reads[T]) extends Reader[T]
 
-class CCreator[T, ID, CC](val link: Link[ID]) extends CanCreate[T, ID, CC]
+class CCreator[T, ID, CC](val link: Link[ID])(
+  implicit override val readsT: Reads[T],
+  implicit val writesCC: Writes[CC]
+) extends CanCreate[T, ID, CC]
 
 trait CanGetAndCreate[T, ID, CC] extends CanCreate[T, ID, CC] with CanGet[T, ID]
 
@@ -140,8 +146,10 @@ trait CanList[T, ID] extends Reader[T] {
 
   val link: Link[ID]
 
-  def list()(implicit g: GitHub, ec: EC): GitHub.FR[Seq[T]] = {
-    g.executeAndReadJson[Seq[T]](g.addAuthAndCaching(new Builder().url(link.listUrl)))
+  def list(params: Map[String, String] = Map.empty)(implicit g: GitHub, ec: EC): GitHub.FR[Seq[T]] = {
+    val httpUrl = HttpUrl.parse(link.listUrl).newBuilder()
+    params.foreach { case (k, v) => httpUrl.addQueryParameter(k, v) }
+    g.executeAndReadJson[Seq[T]](g.addAuthAndCaching(new Builder().url(httpUrl.build())))
   }
 }
 
