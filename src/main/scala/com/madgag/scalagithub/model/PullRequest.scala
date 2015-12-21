@@ -84,12 +84,12 @@ case class PullRequest(
   title: String,
   body: Option[String],
   merged_at: Option[ZonedDateTime],
-  merged_by: Option[User],
+  merged_by: Option[User], // Not included in 'list' responses
   head: CommitPointer,
   base: CommitPointer,
   issue_url: String,
   comments_url: String,
-  comments: Int
+  comments: Option[Int]
 ) extends Commentable {
   val prId = PullRequestId(base.repo.repoId, number)
 
