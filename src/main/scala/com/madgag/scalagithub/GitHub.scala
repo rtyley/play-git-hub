@@ -345,7 +345,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
 
       json.validate[T] match {
         case error: JsError =>
-          val message = s"Error decoding ${request.httpUrl} : $error"
+          val message = s"Error decoding ${request.method} ${request.httpUrl} : $error"
           logger.warn(s"$message\n\n$json\n\n" )
           throw new RuntimeException(message)
         case JsSuccess(result, _) =>
