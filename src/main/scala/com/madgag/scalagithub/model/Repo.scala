@@ -84,7 +84,7 @@ case class Repo(
     with CanGetAndList[Hook, Int] // https://developer.github.com/v3/repos/hooks/#get-single-hook
 
   val contents2 = new CanPut[ContentCommit, String, CreateFile] {
-    override val link: Link[String] = Link.fromListUrl(contents_url)
+    override val link: Link[String] = Link.fromSuffixedUrl(contents_url, "+path")
     override implicit val writesCC: Writes[CreateFile] = CreateFile.writesCreateFile
     override implicit val readsT: Reads[ContentCommit] = ContentCommit.readsContentCommit
   }
@@ -138,7 +138,7 @@ trait CanPut[T, ID, CC] extends Writer[T, CC] {
   val link: Link[ID]
 
   def put(id: ID, cc: CC)(implicit g: GitHub, ec: EC): FR[T] = {
-    g.executeAndReadJson[T](g.addAuth(new Builder().url(link.urlFor(id)).post(toJson(cc))).build())
+    g.executeAndReadJson[T](g.addAuth(new Builder().url(link.urlFor(id)).put(toJson(cc))).build())
   }
 }
 
@@ -177,13 +177,23 @@ trait Link[P] {
 }
 
 object Link {
-  def fromSuffixedUrl[P](suffixedUrl: String, suffix: String): Link[P] =
-    SuffixedEndpointHandler[P](suffixedUrl, suffix)
+  def fromSuffixedUrl[P](suffixedUrl: String, suffix: String): Link[P] = new Link[P] {
+    val encasedSuffix = s"{$suffix}"
+
+    assert(suffixedUrl.endsWith(encasedSuffix))
+
+    override def urlFor(p: P) = {
+      val replacement = if (suffix.startsWith("/")) s"/$p" else p.toString
+      suffixedUrl.replace(encasedSuffix, replacement)
+    }
+
+    override val listUrl = suffixedUrl.stripSuffix(encasedSuffix)
+  }
 
   def fromListUrl[P](suppliedListUrl: String) = new Link[P] {
-    override def urlFor(p: P): String = s"$listUrl/$p"
+    override def urlFor(p: P) = s"$listUrl/$p"
 
-    override val listUrl: String = suppliedListUrl
+    override val listUrl = suppliedListUrl
   }
 }
 
