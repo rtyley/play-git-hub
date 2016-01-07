@@ -21,10 +21,11 @@ import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.commands._
 import com.squareup.okhttp.HttpUrl
 import com.squareup.okhttp.Request.Builder
+import play.api.libs.iteratee.{Step, Iteratee, Enumerator}
 import play.api.libs.json.Json._
 import play.api.libs.json.{Json, Reads, Writes}
 
-import scala.concurrent.{ExecutionContext => EC}
+import scala.concurrent.{ExecutionContext => EC, Future}
 
 object RepoId {
   def from(fullName: String) = {
@@ -146,10 +147,10 @@ trait CanList[T, ID] extends Reader[T] {
 
   val link: Link[ID]
 
-  def list(params: Map[String, String] = Map.empty)(implicit g: GitHub, ec: EC): GitHub.FR[Seq[T]] = {
-    val httpUrl = HttpUrl.parse(link.listUrl).newBuilder()
-    params.foreach { case (k, v) => httpUrl.addQueryParameter(k, v) }
-    g.executeAndReadJson[Seq[T]](g.addAuthAndCaching(new Builder().url(httpUrl.build())))
+  def list(params: Map[String, String] = Map.empty)(implicit g: GitHub, ec: EC): Enumerator[Seq[T]] = {
+    val initialUrl = HttpUrl.parse(link.listUrl).newBuilder()
+    params.foreach { case (k, v) => initialUrl.addQueryParameter(k, v) }
+    g.followAndEnumerate(initialUrl.build())
   }
 }
 

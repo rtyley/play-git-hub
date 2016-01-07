@@ -20,18 +20,21 @@ import java.time.Instant
 import java.util.concurrent.TimeUnit.SECONDS
 
 import com.madgag.okhttpscala._
+import com.madgag.rfc5988link.{LinkParser, LinkTarget}
 import com.madgag.scalagithub.commands._
 import com.madgag.scalagithub.model._
 import com.squareup.okhttp.Request.Builder
 import com.squareup.okhttp._
 import play.api.Logger
 import play.api.http.Status._
+import play.api.libs.iteratee.{Iteratee, Enumerator}
+import play.api.libs.iteratee.Enumerator.unfoldM
 import play.api.libs.json.Json.toJson
 import play.api.libs.json._
 
-import scala.RuntimeException
+import scala.collection.convert.wrapAsScala._
 import scala.concurrent.{ExecutionContext => EC, Future}
-import scala.util.{Failure, Try}
+import scala.language.implicitConversions
 
 object RateLimit {
   case class Status(
@@ -50,7 +53,9 @@ case class RequestScopes(
                           acceptedScopes: Set[String]
 )
 
-case class ResponseMeta(rateLimit: RateLimit, requestScopes: RequestScopes)
+case class ResponseMeta(rateLimit: RateLimit, requestScopes: RequestScopes, links: Seq[LinkTarget]) {
+  val nextOpt: Option[HttpUrl] = links.find(_.relOpt.contains("next")).map(_.url)
+}
 
 object ResponseMeta {
 
@@ -72,10 +77,15 @@ object ResponseMeta {
     response.header("X-Accepted-OAuth-Scopes").split(',').map(_.trim).toSet
   )
 
+  def linksFrom(response: Response): Seq[LinkTarget] = for {
+    linkHeader <- response.headers("Link")
+    linkTargets <- LinkParser.linkValues.parse(linkHeader).get.value
+  } yield linkTargets
+
   def from(response: Response) = {
     val rateLimit = rateLimitFrom(response)
     val requestScopes = requestScopesFrom(response)
-    ResponseMeta(rateLimit, requestScopes)
+    ResponseMeta(rateLimit, requestScopes, linksFrom(response))
   }
 }
 
@@ -102,6 +112,10 @@ object GitHub {
   private val AlwaysHitNetwork = new CacheControl.Builder().maxAge(0, SECONDS).build()
 
   private val IronmanPreview = "application/vnd.github.ironman-preview+json"
+
+  implicit class RichEnumerator[T](e: Enumerator[Seq[T]]) {
+    def all()(implicit ec: EC): Future[Seq[T]] = e(Iteratee.consume()).flatMap(_.run)
+  }
 
 }
 
@@ -175,17 +189,24 @@ class GitHub(ghCredentials: GitHubCredentials) {
     executeAndReadJson(addAuthAndCaching(new Builder().url(repo.trees.urlFor(sha)+"?recursive=1")))
   }
 
+  def followAndEnumerate[T](url: HttpUrl)(implicit ev: Reads[T], ec: EC): Enumerator[Seq[T]] = unfoldM(Option(url)) {
+    _.map { nextUrl =>
+      logger.info(s"Following $nextUrl")
+      for {
+        response <- executeAndReadJson[Seq[T]](addAuthAndCaching(new Builder().url(nextUrl)))
+      } yield Some(response.responseMeta.nextOpt -> response.result)
+    }.getOrElse(Future.successful(None))
+  }
+
   /**
     * https://developer.github.com/v3/repos/#list-your-repositories
     */
-  def listRepos(sort: String, direction: String)(implicit ec: EC): FR[Seq[Repo]] = {
+  def listRepos(sort: String, direction: String)(implicit ec: EC): Enumerator[Seq[Repo]] = {
     // GET /user/repos
-    val url = apiUrlBuilder
+    followAndEnumerate(apiUrlBuilder
       .addPathSegment("user")
       .addPathSegment("repos")
-      .build()
-
-    executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
+      .build())
   }
 
   def checkMembership(org: String, username: String)(implicit ec: EC): Future[Boolean] = {
