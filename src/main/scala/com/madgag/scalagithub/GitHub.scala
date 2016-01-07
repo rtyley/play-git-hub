@@ -17,8 +17,9 @@
 package com.madgag.scalagithub
 
 import java.time.Duration.{ofHours, ofSeconds}
+import java.time.ZoneOffset.UTC
 import java.time.format.DateTimeFormatter.ISO_TIME
-import java.time.{Duration, Instant}
+import java.time.{ZoneOffset, ZonedDateTime, Duration, Instant}
 import java.util.concurrent.TimeUnit.SECONDS
 
 import com.madgag.okhttpscala._
@@ -67,23 +68,24 @@ object RateLimit {
 
     lazy val projectedInstantLimitWillBeExceeded = projectedTimeToExceedingLimit.map(capturedAt.plus)
 
-    lazy val durationBetweenLimitBeingExceededAndReset =
-      projectedInstantLimitWillBeExceeded.map(i => Duration.between(i, reset))
+    // the small this number, the worse things are - negative numbers indicate starvation
+    lazy val bufferDurationBetweenResetAndLimitBeingExceeded =
+      projectedInstantLimitWillBeExceeded.map(i => Duration.between(reset, i))
 
     val reasonableSampleTimeElapsed = elapsedWindowDuration > ofSeconds(30)
 
     val significantQuotaConsumed = consumed > limit * 0.3
 
     val consumptionIsDangerous = (reasonableSampleTimeElapsed || significantQuotaConsumed) &&
-      durationBetweenLimitBeingExceededAndReset.exists(_ < Window.dividedBy(4))
+      bufferDurationBetweenResetAndLimitBeingExceeded.exists(_ < Window.dividedBy(4))
 
     lazy val consumptionSummary = (Seq(
       s"Consumption rate: ${math.round(rateOfConsumption/1000)}/s ($consumed/$limit over ${elapsedWindowDuration.toMinutes} mins)"
     ) ++ warning).mkString(" ")
 
     lazy val warning = for {
-      d <- durationBetweenLimitBeingExceededAndReset
-    } yield s"will exceed quota ${d.toMinutes} mins before reset at ${ISO_TIME.format(reset)}"
+      d <- bufferDurationBetweenResetAndLimitBeingExceeded
+    } yield s"will exceed quota ${d.negated().toMinutes} mins before reset at ${ISO_TIME.format(ZonedDateTime.ofInstant(reset, UTC))}"
   }
 }
 
