@@ -16,19 +16,23 @@
 
 package com.madgag.scalagithub
 
-import java.time.Instant
+import java.time.Duration.{ofHours, ofSeconds}
+import java.time.format.DateTimeFormatter.ISO_TIME
+import java.time.{Duration, Instant}
 import java.util.concurrent.TimeUnit.SECONDS
 
 import com.madgag.okhttpscala._
 import com.madgag.rfc5988link.{LinkParser, LinkTarget}
+import com.madgag.scalagithub.RateLimit.Status.Window
 import com.madgag.scalagithub.commands._
 import com.madgag.scalagithub.model._
 import com.squareup.okhttp.Request.Builder
 import com.squareup.okhttp._
+import com.squareup.okhttp.internal.http.HttpDate
 import play.api.Logger
 import play.api.http.Status._
-import play.api.libs.iteratee.{Iteratee, Enumerator}
 import play.api.libs.iteratee.Enumerator.unfoldM
+import play.api.libs.iteratee.{Enumerator, Iteratee}
 import play.api.libs.json.Json.toJson
 import play.api.libs.json._
 
@@ -37,16 +41,58 @@ import scala.concurrent.{ExecutionContext => EC, Future}
 import scala.language.implicitConversions
 
 object RateLimit {
+  object Status {
+    val Window = ofHours(1L)
+  }
+
   case class Status(
     remaining: Int,
-    reset: Instant
-  )
+    limit: Int,
+    reset: Instant,
+    capturedAt: Instant
+  ) {
+
+    val dateOrdering = implicitly[Ordering[Duration]]
+    import dateOrdering._
+
+    val consumed = limit - remaining
+    val previousReset = reset.minus(Window)
+    val elapsedWindowDuration = Duration.between(previousReset, capturedAt)
+
+    lazy val rateOfConsumption = consumed.toFloat / elapsedWindowDuration.toMillis
+
+    lazy val projectedTimeToExceedingLimit: Option[Duration] = if (rateOfConsumption > 0) {
+      Some(Duration.ofMillis(math.round(remaining / rateOfConsumption)))
+    } else None
+
+    lazy val projectedInstantLimitWillBeExceeded = projectedTimeToExceedingLimit.map(capturedAt.plus)
+
+    lazy val durationBetweenLimitBeingExceededAndReset =
+      projectedInstantLimitWillBeExceeded.map(i => Duration.between(i, reset))
+
+    val reasonableSampleTimeElapsed = elapsedWindowDuration > ofSeconds(30)
+
+    val significantQuotaConsumed = consumed > limit * 0.3
+
+    val consumptionIsDangerous = (reasonableSampleTimeElapsed || significantQuotaConsumed) &&
+      durationBetweenLimitBeingExceededAndReset.exists(_ < Window.dividedBy(4))
+
+    lazy val consumptionSummary = (Seq(
+      s"Consumption rate: ${math.round(rateOfConsumption/1000)}/s ($consumed/$limit over ${elapsedWindowDuration.toMinutes} mins)"
+    ) ++ warning).mkString(" ")
+
+    lazy val warning = for {
+      d <- durationBetweenLimitBeingExceededAndReset
+    } yield s"will exceed quota ${d.toMinutes} mins before reset at ${ISO_TIME.format(reset)}"
+  }
 }
 
 case class RateLimit(
   consumed: Int,
   statusOpt: Option[RateLimit.Status]
-)
+) {
+  val hitOrMiss = if (consumed > 0) "MISS" else "HIT "
+}
 
 case class RequestScopes(
                           authedScopes: Set[String],
@@ -60,8 +106,10 @@ case class ResponseMeta(rateLimit: RateLimit, requestScopes: RequestScopes, link
 object ResponseMeta {
 
   def rateLimitStatusFrom(response: Response) = RateLimit.Status(
-    response.header("X-RateLimit-Remaining").toInt,
-    Instant.ofEpochSecond(response.header("X-RateLimit-Reset").toLong)
+    remaining = response.header("X-RateLimit-Remaining").toInt,
+    limit = response.header("X-RateLimit-Limit").toInt,
+    reset = Instant.ofEpochSecond(response.header("X-RateLimit-Reset").toLong),
+    capturedAt = HttpDate.parse(response.header("Date")).toInstant
   )
 
   def rateLimitFrom(response: Response): RateLimit = {
@@ -352,13 +400,14 @@ class GitHub(ghCredentials: GitHubCredentials) {
       response <- execute(request)
     } yield {
       val meta = ResponseMeta.from(response)
-      logger.debug(s"${meta.rateLimit} ${response.code} ${request.method} ${request.httpUrl}")
+      val mess = s"${meta.rateLimit.hitOrMiss} ${response.code} ${request.method} ${request.httpUrl}"
+      meta.rateLimit.statusOpt.filter(_.consumptionIsDangerous).fold {
+        logger.debug(mess)
+      } { status =>
+        logger.warn(s"$mess ${status.consumptionSummary}")
+      }
 
       val responseBody = response.body()
-
-  //    logger.debug(s"contentLength = ${responseBody.contentLength}")
-
-      //      logger.debug(s"byteStream = $byteStream")
 
       val json = Json.parse(responseBody.byteStream())
 
