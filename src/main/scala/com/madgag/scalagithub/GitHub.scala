@@ -16,15 +16,15 @@
 
 package com.madgag.scalagithub
 
-import java.time.Duration.{ofHours, ofSeconds}
+import java.time.Duration.{ZERO, ofHours, ofSeconds}
 import java.time.ZoneOffset.UTC
 import java.time.format.DateTimeFormatter.ISO_TIME
-import java.time.{ZoneOffset, ZonedDateTime, Duration, Instant}
+import java.time.{Duration, Instant, ZonedDateTime}
 import java.util.concurrent.TimeUnit.SECONDS
 
 import com.madgag.okhttpscala._
 import com.madgag.rfc5988link.{LinkParser, LinkTarget}
-import com.madgag.scalagithub.RateLimit.Status.Window
+import com.madgag.scalagithub.RateLimit.Status.{ReasonableSampleTime, Window}
 import com.madgag.scalagithub.commands._
 import com.madgag.scalagithub.model._
 import com.squareup.okhttp.Request.Builder
@@ -40,10 +40,12 @@ import play.api.libs.json._
 import scala.collection.convert.wrapAsScala._
 import scala.concurrent.{ExecutionContext => EC, Future}
 import scala.language.implicitConversions
+import scala.math.round
 
 object RateLimit {
   object Status {
     val Window = ofHours(1L)
+    val ReasonableSampleTime = ofSeconds(30)
   }
 
   case class Status(
@@ -59,33 +61,51 @@ object RateLimit {
     val consumed = limit - remaining
     val previousReset = reset.minus(Window)
     val elapsedWindowDuration = Duration.between(previousReset, capturedAt)
+    lazy val resetTimeString = ISO_TIME.format(ZonedDateTime.ofInstant(reset, UTC))
 
-    lazy val rateOfConsumption = consumed.toFloat / elapsedWindowDuration.toMillis
+    val reasonableSampleTimeElapsed = elapsedWindowDuration > ReasonableSampleTime
 
-    lazy val projectedTimeToExceedingLimit: Option[Duration] = if (rateOfConsumption > 0) {
-      Some(Duration.ofMillis(math.round(remaining / rateOfConsumption)))
-    } else None
+    val significantQuotaConsumed = consumed > limit * 0.2
 
-    lazy val projectedInstantLimitWillBeExceeded = projectedTimeToExceedingLimit.map(capturedAt.plus)
+    case class StarvationProjection(nonZeroConsumed: Int) {
+      assert(nonZeroConsumed > 0)
 
-    // the small this number, the worse things are - negative numbers indicate starvation
-    lazy val bufferDurationBetweenResetAndLimitBeingExceeded =
-      projectedInstantLimitWillBeExceeded.map(i => Duration.between(reset, i))
+      val averageTimeToConsumeOneUnitOfQuota = elapsedWindowDuration dividedBy nonZeroConsumed
 
-    val reasonableSampleTimeElapsed = elapsedWindowDuration > ofSeconds(30)
+      val projectedTimeToExceedingLimit = averageTimeToConsumeOneUnitOfQuota multipliedBy remaining
 
-    val significantQuotaConsumed = consumed > limit * 0.3
+      val projectedInstantLimitWouldBeExceededWithoutReset = capturedAt plus projectedTimeToExceedingLimit
+
+      // the smaller this number, the worse things are - negative numbers indicate starvation
+      val bufferDurationBetweenResetAndLimitBeingExceeded =
+        Duration.between(reset, projectedInstantLimitWouldBeExceededWithoutReset)
+
+      val bufferAsProportionOfWindow =
+        bufferDurationBetweenResetAndLimitBeingExceeded.toMillis.toFloat / Window.toMillis
+
+      lazy val summary = {
+        val mins = bufferDurationBetweenResetAndLimitBeingExceeded.negated.toMinutes
+        if (bufferDurationBetweenResetAndLimitBeingExceeded.isNegative) {
+          s"will exceed quota $mins before reset at $resetTimeString"
+        } else s"would exceed quota $mins after reset"
+      }
+    }
+
+    val projectedConsumptionOverEntireQuotaWindow: Option[Int] = if (elapsedWindowDuration <= ZERO) None else {
+      Some(round(consumed * (Window.toNanos.toFloat / elapsedWindowDuration.toNanos)))
+    }
+
+    lazy val starvationProjection: Option[StarvationProjection] =
+      if (consumed > 0) Some(StarvationProjection(consumed)) else None
+
+    val summary = (
+      Some(s"Consumed $consumed/$limit over ${elapsedWindowDuration.toMinutes} mins") ++
+        projectedConsumptionOverEntireQuotaWindow.map(p => s"projected consumption: $p over window") ++
+        starvationProjection.map(_.summary)
+    ).mkString(", ")
 
     val consumptionIsDangerous = (reasonableSampleTimeElapsed || significantQuotaConsumed) &&
-      bufferDurationBetweenResetAndLimitBeingExceeded.exists(_ < Window.dividedBy(4))
-
-    lazy val consumptionSummary = (Seq(
-      s"Consumption rate: ${math.round(rateOfConsumption/1000)}/s ($consumed/$limit over ${elapsedWindowDuration.toMinutes} mins)"
-    ) ++ warning).mkString(" ")
-
-    lazy val warning = for {
-      d <- bufferDurationBetweenResetAndLimitBeingExceeded
-    } yield s"will exceed quota ${d.negated().toMinutes} mins before reset at ${ISO_TIME.format(ZonedDateTime.ofInstant(reset, UTC))}"
+      starvationProjection.exists(_.bufferAsProportionOfWindow < 0.2)
   }
 }
 
@@ -212,6 +232,19 @@ class GitHub(ghCredentials: GitHubCredentials) {
   }
 
   /**
+    * https://developer.github.com/v3/orgs/#get-an-organization
+    */
+  def getOrg(org: String)(implicit ec: EC): FR[Org] = {
+    // GET /orgs/:org
+    val url = apiUrlBuilder
+      .addPathSegment("orgs")
+      .addPathSegment(org)
+      .build()
+
+    executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
+  }
+
+  /**
     * https://developer.github.com/v3/repos/#delete-a-repository
     */
   def deleteRepo(repo: Repo)(implicit ec: EC): Future[Boolean] = {
@@ -241,7 +274,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
 
   def followAndEnumerate[T](url: HttpUrl)(implicit ev: Reads[T], ec: EC): Enumerator[Seq[T]] = unfoldM(Option(url)) {
     _.map { nextUrl =>
-      logger.info(s"Following $nextUrl")
+      logger.debug(s"Following $nextUrl")
       for {
         response <- executeAndReadJson[Seq[T]](addAuthAndCaching(new Builder().url(nextUrl)))
       } yield Some(response.responseMeta.nextOpt -> response.result)
@@ -406,14 +439,12 @@ class GitHub(ghCredentials: GitHubCredentials) {
       meta.rateLimit.statusOpt.filter(_.consumptionIsDangerous).fold {
         logger.debug(mess)
       } { status =>
-        logger.warn(s"$mess ${status.consumptionSummary}")
+        logger.warn(s"$mess ${status.summary}")
       }
 
       val responseBody = response.body()
 
       val json = Json.parse(responseBody.byteStream())
-
-      logger.debug(s"json = ${json.toString.take(40)}")
 
       json.validate[T] match {
         case error: JsError =>
