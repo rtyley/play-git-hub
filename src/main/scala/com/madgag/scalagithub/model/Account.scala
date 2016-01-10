@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Roberto Tyley
+ * Copyright 2016 Roberto Tyley
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,17 +16,14 @@
 
 package com.madgag.scalagithub.model
 
-import play.api.libs.json.Json
+trait Account {
+  val login: String
+  val id: Long
+  val url: String
+  val avatar_url: String
+  val name: Option[String]
 
-case class User(
-  login: String,
-  id: Long,
-  avatar_url: String,
-  url: String,
-  html_url: String,
-  name: Option[String]
-) extends Account
+  val atLogin = s"@$login"
 
-object User {
-  implicit val readsUser = Json.reads[User]
+  lazy val displayName = name.filter(_.nonEmpty).getOrElse(atLogin)
 }
