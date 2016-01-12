@@ -8,7 +8,7 @@ scalaVersion := "2.11.7"
 
 libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play" % "2.4.6",
-  "com.squareup.okhttp" % "okhttp" % "2.7.0",
+  "com.squareup.okhttp" % "okhttp" % "2.7.2",
   "com.lihaoyi" %% "fastparse" % "0.3.4",
   "com.madgag.scala-git" %% "scala-git" % "3.3",
   "com.madgag.scala-git" %% "scala-git-test" % "3.3" % "test",
