@@ -65,7 +65,7 @@ object Tree {
     `type`: String,
     size: Option[Long],
     sha: ObjectId,
-    url: String
+    url: Option[String]
   )
 
   object Entry {
