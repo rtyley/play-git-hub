@@ -26,8 +26,8 @@ import com.madgag.scalagithub.model.Link.fromListUrl
 import com.squareup.okhttp.Request.Builder
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.revwalk.RevWalk
-import play.api.libs.json.{Reads, Json}
 import play.api.libs.json.Json._
+import play.api.libs.json.{Json, Reads}
 
 import scala.concurrent.{ExecutionContext => EC}
 
@@ -39,7 +39,7 @@ case class CommitPointer(
   ref: String,
   sha: ObjectId,
   user: User,
-  repo: Repo
+  repo: Option[Repo]
 ) {
   def asRevCommit(implicit revWalk: RevWalk) = sha.asRevCommit
 }
@@ -91,7 +91,9 @@ case class PullRequest(
   comments_url: String,
   comments: Option[Int]
 ) extends Commentable {
-  val prId = PullRequestId(base.repo.repoId, number)
+  val baseRepo = base.repo.get // base repo is always available, unlike head repo which might be gone
+
+  val prId = PullRequestId(baseRepo.repoId, number)
 
   // You can't 'get' a label for an Issue - the label is 'got' from a Repo
   val labels = new CReader[Label, String](fromListUrl(s"$issue_url/labels"))
