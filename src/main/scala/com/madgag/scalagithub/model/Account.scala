@@ -16,12 +16,14 @@
 
 package com.madgag.scalagithub.model
 
+import java.time.ZonedDateTime
 trait Account {
   val login: String
   val id: Long
   val url: String
   val avatar_url: String
   val name: Option[String]
+  val created_at: Option[ZonedDateTime]
 
   val atLogin = s"@$login"
 

@@ -16,6 +16,7 @@
 
 package com.madgag.scalagithub.model
 
+import java.time.ZonedDateTime
 
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.commands.CreateFile
@@ -60,6 +61,7 @@ case class Org(
   avatar_url: String,
   description: Option[String],
   name: Option[String],
+  created_at: Option[ZonedDateTime],
   html_url: String
 ) extends Account {
   lazy val membersAdminUrl = s"https://github.com/orgs/$login/members"

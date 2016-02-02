@@ -16,6 +16,8 @@
 
 package com.madgag.scalagithub.model
 
+import java.time.ZonedDateTime
+
 import play.api.libs.json.Json
 
 case class User(
@@ -24,7 +26,8 @@ case class User(
   avatar_url: String,
   url: String,
   html_url: String,
-  name: Option[String]
+  name: Option[String],
+  created_at: Option[ZonedDateTime]
 ) extends Account
 
 object User {
