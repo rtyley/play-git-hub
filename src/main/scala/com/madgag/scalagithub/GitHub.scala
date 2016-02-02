@@ -84,9 +84,9 @@ object RateLimit {
         bufferDurationBetweenResetAndLimitBeingExceeded.toMillis.toFloat / Window.toMillis
 
       lazy val summary = {
-        val mins = bufferDurationBetweenResetAndLimitBeingExceeded.negated.toMinutes
+        val mins = s"${bufferDurationBetweenResetAndLimitBeingExceeded.abs.toMinutes} mins"
         if (bufferDurationBetweenResetAndLimitBeingExceeded.isNegative) {
-          s"will exceed quota $mins before reset at $resetTimeString"
+          s"will exceed quota $mins before reset occurs at $resetTimeString"
         } else s"would exceed quota $mins after reset"
       }
     }
