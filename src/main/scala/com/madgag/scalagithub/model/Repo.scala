@@ -21,11 +21,11 @@ import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.commands._
 import com.squareup.okhttp.HttpUrl
 import com.squareup.okhttp.Request.Builder
-import play.api.libs.iteratee.{Step, Iteratee, Enumerator}
+import play.api.libs.iteratee.Enumerator
 import play.api.libs.json.Json._
 import play.api.libs.json.{Json, Reads, Writes}
 
-import scala.concurrent.{ExecutionContext => EC, Future}
+import scala.concurrent.{ExecutionContext => EC}
 
 object RepoId {
   def from(fullName: String) = {
@@ -160,6 +160,15 @@ trait CanGet[T, ID] extends Reader[T] {
 
   def get(id: ID)(implicit g: GitHub, ec: EC): FR[T] = {
     g.executeAndReadJson[T](g.addAuthAndCaching(new Builder().url(link.urlFor(id))))
+  }
+}
+
+trait CanCheck[ID] {
+
+  val link: Link[ID]
+
+  def check(id: ID)(implicit g: GitHub, ec: EC): FR[Boolean] = {
+    g.executeAndCheck(g.addAuthAndCaching(new Builder().url(link.urlFor(id))))
   }
 }
 

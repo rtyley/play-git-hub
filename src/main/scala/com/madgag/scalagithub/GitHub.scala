@@ -183,6 +183,19 @@ object GitHub {
 
   private val IronmanPreview = "application/vnd.github.ironman-preview+json"
 
+
+  def logAndGetMeta(request: Request, response: Response): ResponseMeta = {
+    val meta = ResponseMeta.from(response)
+    val mess = s"${meta.rateLimit.hitOrMiss} ${response.code} ${request.method} ${request.httpUrl}"
+    meta.rateLimit.statusOpt.filter(_.consumptionIsDangerous).fold {
+      logger.debug(mess)
+    } { status =>
+      logger.warn(s"$mess ${status.summary}")
+    }
+    meta
+  }
+
+
   implicit class RichEnumerator[T](e: Enumerator[Seq[T]]) {
     def all()(implicit ec: EC): Future[Seq[T]] = e(Iteratee.consume()).flatMap(_.run)
   }
@@ -430,30 +443,32 @@ class GitHub(ghCredentials: GitHubCredentials) {
     executeAndReadJson(addAuthAndCaching(new Builder().url(commentable.comments_url).get()))
   }
 
-  def executeAndReadJson[T](request: Request)(implicit ev: Reads[T], ec: EC): FR[T] = {
+  def executeAndCheck(request: Request)(implicit ec: EC): FR[Boolean] = {
     for {
       response <- execute(request)
     } yield {
-      val meta = ResponseMeta.from(response)
-      val mess = s"${meta.rateLimit.hitOrMiss} ${response.code} ${request.method} ${request.httpUrl}"
-      meta.rateLimit.statusOpt.filter(_.consumptionIsDangerous).fold {
-        logger.debug(mess)
-      } { status =>
-        logger.warn(s"$mess ${status.summary}")
-      }
+      val meta = logAndGetMeta(request, response)
 
-      val responseBody = response.body()
+      GitHubResponse(meta, response.code() == 204)
+    }
+  }
 
-      val json = Json.parse(responseBody.byteStream())
+  def executeAndReadJson[T](request: Request)(implicit ev: Reads[T], ec: EC): FR[T] = for {
+    response <- execute(request)
+  } yield {
+    val meta = logAndGetMeta(request, response)
 
-      json.validate[T] match {
-        case error: JsError =>
-          val message = s"Error decoding ${request.method} ${request.httpUrl} : $error"
-          logger.warn(s"$message\n\n$json\n\n" )
-          throw new RuntimeException(message)
-        case JsSuccess(result, _) =>
-          GitHubResponse(meta, result)
-      }
+    val responseBody = response.body()
+
+    val json = Json.parse(responseBody.byteStream())
+
+    json.validate[T] match {
+      case error: JsError =>
+        val message = s"Error decoding ${request.method} ${request.httpUrl} : $error"
+        logger.warn(s"$message\n\n$json\n\n" )
+        throw new RuntimeException(message)
+      case JsSuccess(result, _) =>
+        GitHubResponse(meta, result)
     }
   }
 
