@@ -205,11 +205,11 @@ object GitHub {
 class GitHub(ghCredentials: GitHubCredentials) {
   import GitHub._
 
-  def checkRateLimit()(implicit ec: EC): Future[ResponseMeta] = {
+  def checkRateLimit()(implicit ec: EC): Future[RateLimit] = {
     // GET /rate_limit  https://developer.github.com/v3/rate_limit/
     val url = apiUrlBuilder.addPathSegment("rate_limit").build()
 
-    ghCredentials.okHttpClient.execute(addAuth(new Builder().url(url).get).build()).map(ResponseMeta.from)
+    ghCredentials.okHttpClient.execute(addAuth(new Builder().url(url).get).build()).map(ResponseMeta.rateLimitFrom)
   }
 
   /**
