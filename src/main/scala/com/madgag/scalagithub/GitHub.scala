@@ -209,7 +209,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
     // GET /rate_limit  https://developer.github.com/v3/rate_limit/
     val url = apiUrlBuilder.addPathSegment("rate_limit").build()
 
-    ghCredentials.okHttpClient.execute(addAuth(new Builder().url(url).get).build()).map(ResponseMeta.rateLimitStatusFrom)
+    execute(addAuth(new Builder().url(url).get).build())(ResponseMeta.rateLimitStatusFrom)
   }
 
   /**
@@ -269,7 +269,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
     */
   def deleteRepo(repo: Repo)(implicit ec: EC): Future[Boolean] = {
     // DELETE /repos/:owner/:repo
-    ghCredentials.okHttpClient.execute(addAuth(new Builder().url(repo.url).delete()).build()).map(_.code() == 204)
+    execute(addAuth(new Builder().url(repo.url).delete()).build())(_.code() == 204)
   }
 
   /**
@@ -321,9 +321,9 @@ class GitHub(ghCredentials: GitHubCredentials) {
       .addPathSegment(username)
       .build()
 
-    ghCredentials.okHttpClient.execute(addAuthAndCaching(new Builder().url(url)
+    execute(addAuthAndCaching(new Builder().url(url)
       .addHeader("Accept", IronmanPreview)
-      .get)).map(_.code() == 204)
+      .get))(_.code() == 204)
   }
 
   /**
@@ -429,7 +429,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
       .addPathSegment(repoName)
       .build()
 
-    ghCredentials.okHttpClient.execute(addAuthAndCaching(new Builder().url(url)
+    executeAndCheck(addAuthAndCaching(new Builder().url(url)
       .addHeader("Accept", IronmanPreview)
       .put(Json.obj("permission" -> "admin"))))
   }
@@ -450,20 +450,16 @@ class GitHub(ghCredentials: GitHubCredentials) {
     executeAndReadJson(addAuthAndCaching(new Builder().url(commentable.comments_url).get()))
   }
 
-  def executeAndCheck(request: Request)(implicit ec: EC): FR[Boolean] = {
-    for {
-      response <- execute(request)
-    } yield {
-      val meta = logAndGetMeta(request, response)
+  def executeAndCheck(request: Request)(implicit ec: EC): FR[Boolean] = execute(request) {
+    response =>
 
-      GitHubResponse(meta, response.code() == 204)
-    }
+    GitHubResponse(logAndGetMeta(request, response), response.code() == 204)
   }
 
-  def executeAndReadJson[T](request: Request)(implicit ev: Reads[T], ec: EC): FR[T] = for {
-    response <- execute(request)
-  } yield {
-    val meta = logAndGetMeta(request, response)
+  def executeAndReadJson[T](request: Request)(implicit ev: Reads[T], ec: EC): FR[T] = execute(request) {
+    response =>
+
+      val meta = logAndGetMeta(request, response)
 
     val responseBody = response.body()
 
@@ -479,8 +475,8 @@ class GitHub(ghCredentials: GitHubCredentials) {
     }
   }
 
-  def execute[T](request: Request)(implicit ec: EC): Future[Response] =
-    ghCredentials.okHttpClient.execute(request)
+  def execute[T](request: Request)(processor: Response => T)(implicit ec: EC): Future[T] =
+    ghCredentials.okHttpClient.execute(request)(processor)
 
   def apiUrlBuilder: HttpUrl.Builder = new HttpUrl.Builder().scheme("https").host("api.github.com")
 

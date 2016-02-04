@@ -17,6 +17,7 @@
 package com.madgag.scalagithub.model
 
 import com.madgag.scalagithub.GitHub
+import com.madgag.scalagithub.GitHub.FR
 import com.squareup.okhttp.Request.Builder
 
 import scala.concurrent.{ExecutionContext => EC, Future}
@@ -24,7 +25,6 @@ import scala.concurrent.{ExecutionContext => EC, Future}
 trait Deleteable {
   val url: String
 
-  def delete()(implicit g: GitHub, ec: EC): Future[Boolean] = {
-    g.execute(g.addAuth(new Builder().url(url).delete()).build()).map(_.code() == 204)
-  }
+  def delete()(implicit g: GitHub, ec: EC): FR[Boolean] =
+    g.executeAndCheck(g.addAuth(new Builder().url(url).delete()).build())
 }

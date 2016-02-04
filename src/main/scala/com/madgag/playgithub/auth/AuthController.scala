@@ -45,8 +45,9 @@ trait AuthController extends Controller {
       .build()
 
     for {
-      response <- client.execute(accessTokenRequest)
-      accessToken = Json.parse(response.body.byteStream()).validate[GitHubAuthResponse].get.access_token
+      accessToken <- client.execute(accessTokenRequest) { response =>
+        Json.parse(response.body.byteStream()).validate[GitHubAuthResponse].get.access_token
+      }
       userResponse <- new GitHub(GitHubCredentials(accessToken, new OkHttpClient)).getUser()
     } yield {
       val user = userResponse.result

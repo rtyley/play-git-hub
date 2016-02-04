@@ -45,14 +45,9 @@ object Slack {
 
 class Slack(slackWebHook: String, okHttpClient: OkHttpClient) {
 
-  def send(message: Message): Future[_] = {
-
-    val responseF = okHttpClient.execute(new Builder().url(HttpUrl.parse(slackWebHook)).post(toJson(message)).build)
-
-    responseF.onComplete {
-      r => Logger.debug(s"Response from Slack: ${r.map(_.body)}")
+  def send(message: Message): Future[Int] = {
+    okHttpClient.execute(new Builder().url(HttpUrl.parse(slackWebHook)).post(toJson(message)).build) {
+      response => response.code()
     }
-
-    responseF
   }
 }

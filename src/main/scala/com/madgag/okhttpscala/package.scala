@@ -33,8 +33,8 @@ package object okhttpscala {
 
   implicit class RickOkHttpClient(client: OkHttpClient) {
 
-    def execute(request: Request)(implicit executionContext: ExecutionContext): Future[Response] = {
-      val p = Promise[Response]()
+    def execute[T](request: Request)(processor: Response => T)(implicit executionContext: ExecutionContext): Future[T] = {
+      val p = Promise[T]()
 
       client.newCall(request).enqueue(new Callback {
         override def onFailure(request: Request, e: IOException) {
@@ -42,7 +42,9 @@ package object okhttpscala {
         }
 
         override def onResponse(response: Response) {
-          p.success(response)
+          val result: T = processor(response)
+          response.body.close()
+          p.success(result)
         }
       })
 
