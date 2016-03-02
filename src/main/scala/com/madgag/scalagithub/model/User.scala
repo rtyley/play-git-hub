@@ -18,7 +18,11 @@ package com.madgag.scalagithub.model
 
 import java.time.ZonedDateTime
 
-import play.api.libs.json.Json
+import com.madgag.scalagithub.GitHub
+import com.madgag.scalagithub.GitHub._
+import play.api.libs.json.{Reads, Json}
+
+import scala.concurrent.{ExecutionContext => EC}
 
 case class User(
   login: String,
@@ -26,9 +30,11 @@ case class User(
   avatar_url: String,
   url: String,
   html_url: String,
-  name: Option[String],
-  created_at: Option[ZonedDateTime]
-) extends Account
+  name: Option[String] = None,
+  created_at: Option[ZonedDateTime] = None
+) extends Account {
+  override type Self = User
+}
 
 object User {
   implicit val readsUser = Json.reads[User]
