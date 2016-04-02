@@ -53,6 +53,7 @@ case class Repo(
   labels_url: String,
   teams_url: String,
   git_refs_url: String,
+  issues_url: String,
   pulls_url: String,
   commits_url: String,
   contents_url: String,
@@ -81,6 +82,9 @@ case class Repo(
   // https://developer.github.com/v3/pulls/#create-a-pull-request
   // https://developer.github.com/v3/pulls/#get-a-single-pull-request
 
+  val issues = new CCreator[Issue, Int, CreateIssue](Link.fromSuffixedUrl(issues_url, "/number"))
+    with CanGetAndList[Issue, Int]
+
   val hooks = new CReader[Hook, Int](Link.fromListUrl(hooks_url))
     with CanGetAndList[Hook, Int] // https://developer.github.com/v3/repos/hooks/#get-single-hook
 
@@ -102,6 +106,9 @@ case class Repo(
   val settingsUrl = s"$html_url/settings"
 
   val collaborationSettingsUrl = s"$settingsUrl/collaboration"
+
+  // lazy way of constructing https://github.com/submitgit/pretend-git/compare/7c597ef345aed345576de616c51f27e6f4b342b3...f90334356a304bc0acad01ab4fc64c49a3afd371
+  def compareUrl(base: String, head: String) = s"$html_url/compare/$base...$head"
 }
 
 import com.madgag.scalagithub.GitHub._

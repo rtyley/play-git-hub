@@ -23,6 +23,7 @@ import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.{FR, _}
 import com.madgag.scalagithub.commands.{CreateComment, MergePullRequest}
 import com.madgag.scalagithub.model.Link.fromListUrl
+import com.madgag.scalagithub.model.PullRequest.CommitOverview
 import com.squareup.okhttp.Request.Builder
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.revwalk.RevWalk
@@ -38,7 +39,7 @@ import com.madgag.scalagithub._
 case class CommitPointer(
   ref: String,
   sha: ObjectId,
-  user: User,
+  user: Option[User], // git/git/pulls/113 had user null on head
   repo: Option[Repo]
 ) {
   def asRevCommit(implicit revWalk: RevWalk) = sha.asRevCommit
@@ -55,6 +56,16 @@ trait Commentable {
     with CanGetAndList[Comment, Long]
   // https://developer.github.com/v3/issues/comments/#get-a-single-comment
   // https://developer.github.com/v3/issues/comments/#create-a-comment
+}
+
+trait HasLabels {
+  val issue_url: String
+
+  // You can't 'get' a label for an Issue - the label is 'got' from a Repo
+  val labels = new CReader[Label, String](fromListUrl(s"$issue_url/labels"))
+    with CanList[Label, String]
+    with CanReplace[Label, String] // https://developer.github.com/v3/issues/labels/#replace-all-labels-for-an-issue
+  // support add / remove ?
 }
 
 object PullRequestId {
@@ -76,32 +87,50 @@ trait Createable {
   type Creation
 }
 
-case class PullRequest(
+case class Issue(
   number: Int,
   url: String,
   html_url: String,
   user: User,
   title: String,
   body: Option[String],
+  issue_url: String,
+  created_at: Option[ZonedDateTime] = None,
+  comments_url: String,
+  comments: Option[Int]
+) extends Commentable with HasLabels
+
+object Issue {
+  implicit val readsIssue = Json.reads[Issue]
+}
+
+
+case class PullRequest(
+  number: Int,
+  url: String,
+  html_url: String,
+  patch_url: String,
+  user: User,
+  state: String,
+  title: String,
+  body: Option[String],
+  created_at: ZonedDateTime,
   merged_at: Option[ZonedDateTime],
   merged_by: Option[User], // Not included in 'list' responses
   head: CommitPointer,
   base: CommitPointer,
   issue_url: String,
+  commits_url: String, // "https://api.github.com/repos/octocat/Hello-World/pulls/1347/commits"
   comments_url: String,
   comments: Option[Int]
-) extends Commentable {
+) extends Commentable with HasLabels {
   val baseRepo = base.repo.get // base repo is always available, unlike head repo which might be gone
 
   val prId = PullRequestId(baseRepo.repoId, number)
 
-  // You can't 'get' a label for an Issue - the label is 'got' from a Repo
-  val labels = new CReader[Label, String](fromListUrl(s"$issue_url/labels"))
-    with CanList[Label, String]
-    with CanReplace[Label, String] // https://developer.github.com/v3/issues/labels/#replace-all-labels-for-an-issue
-  // support add / remove ?
-
   val mergeUrl = s"$url/merge"
+
+  lazy val compareUrl = baseRepo.compareUrl(base.sha.name(), head.sha.name())
 
   /**
     * https://developer.github.com/v3/pulls/#merge-a-pull-request-merge-button
@@ -110,9 +139,45 @@ case class PullRequest(
     // PUT /repos/:owner/:repo/pulls/:number/merge
     g.executeAndReadJson(g.addAuth(new Builder().url(mergeUrl).put(toJson(mergePullRequest))).build())
   }
+
+  /**
+    * https://developer.github.com/v3/pulls/#list-commits-on-a-pull-request
+    * GET /repos/:owner/:repo/pulls/:number/commits
+    */
+  val commits = new CReader[CommitOverview, Int](Link.fromListUrl(commits_url))
+    with CanList[CommitOverview, Int] // https://developer.github.com/v3/repos/hooks/#get-single-hook
+
 }
 
 object PullRequest {
+
+  case class CommitOverview(
+    url: String,
+    sha: ObjectId,
+    html_url: String,
+    commit: CommitOverview.Commit
+  )
+
+  // https://developer.github.com/v3/pulls/#list-commits-on-a-pull-request
+  object CommitOverview {
+    case class Commit(
+      url: String,
+      author: CommitIdent,
+      committer: CommitIdent,
+      message: String,
+      comment_count: Int
+    ) {
+      val subject: String = message.lines.next()
+    }
+
+    implicit val readsCommitOverview: Reads[CommitOverview] = Json.reads[CommitOverview]
+
+    implicit def overview2commit(co: CommitOverview):Commit = co.commit
+
+    object Commit {
+      implicit val readsCommit: Reads[Commit] = Json.reads[Commit]
+    }
+  }
 
   /**
     * https://developer.github.com/v3/pulls/#response-if-merge-was-successful

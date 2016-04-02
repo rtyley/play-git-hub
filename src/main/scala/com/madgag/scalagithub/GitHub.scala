@@ -341,6 +341,20 @@ class GitHub(ghCredentials: GitHubCredentials) {
   }
 
   /**
+    * https://developer.github.com/v3/users/emails/#list-email-addresses-for-a-user
+    */
+  def getUserEmails()(implicit ec: EC): FR[Seq[Email]] = {
+    // GET /user/emails
+    val url = apiUrlBuilder
+      .addPathSegment("user")
+      .addPathSegment("emails")
+      .build()
+
+    // TODO Pagination: https://developer.github.com/guides/traversing-with-pagination/
+    executeAndReadJson[Seq[Email]](addAuthAndCaching(new Builder().url(url)))
+  }
+
+  /**
     * https://developer.github.com/v3/repos/hooks/#list-hooks
     */
   def listHooks(repo: RepoId)(implicit ec: EC): FR[Seq[Hook]] = {

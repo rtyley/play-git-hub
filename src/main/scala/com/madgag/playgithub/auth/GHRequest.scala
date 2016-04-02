@@ -27,6 +27,10 @@ class GHRequest[A](val gitHubCredentials: GitHubCredentials, request: Request[A]
 
   lazy val userF = gitHub.getUser().map(_.result)
 
+  lazy val userEmailsF = gitHub.getUserEmails()
+
+  lazy val userPrimaryEmailF = userEmailsF.map(_.find(_.primary).get)
+
   lazy val userTeamsF = gitHub.getUserTeams()
 
 }
