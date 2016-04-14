@@ -116,6 +116,7 @@ case class PullRequest(
   body: Option[String],
   created_at: ZonedDateTime,
   merged_at: Option[ZonedDateTime],
+  merge_commit_sha: Option[ObjectId], // deprecated? https://developer.github.com/v3/pulls/#get-a-single-pull-request
   merged_by: Option[User], // Not included in 'list' responses
   head: CommitPointer,
   base: CommitPointer,
