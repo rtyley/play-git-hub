@@ -149,15 +149,15 @@ case class PullRequest(
     with CanList[CommitOverview, Int] // https://developer.github.com/v3/repos/hooks/#get-single-hook
 
 
-  def availableTipCommits(pr: PullRequest)(implicit repoThreadLocal: ThreadLocalObjectDatabaseResources): Set[RevCommit] = {
+  def availableTipCommits(implicit repoThreadLocal: ThreadLocalObjectDatabaseResources): Set[RevCommit] = {
     implicit val revWalk = new RevWalk(repoThreadLocal.reader())
 
     val prUltimateCommitOpt = for {
-      mergeCommitId <- pr.merge_commit_sha
+      mergeCommitId <- merge_commit_sha
       mergeCommit <- mergeCommitId.asRevCommitOpt
     } yield if (mergeCommit.getParentCount == 1) mergeCommit else mergeCommit.getParent(1).asRevCommit
 
-    val prHeadCommitOpt = pr.head.sha.asRevCommitOpt
+    val prHeadCommitOpt = head.sha.asRevCommitOpt
 
     prHeadCommitOpt.toSet ++ prUltimateCommitOpt
   }
