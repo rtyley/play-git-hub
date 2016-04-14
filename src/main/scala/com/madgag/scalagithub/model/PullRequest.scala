@@ -26,7 +26,7 @@ import com.madgag.scalagithub.model.Link.fromListUrl
 import com.madgag.scalagithub.model.PullRequest.CommitOverview
 import com.squareup.okhttp.Request.Builder
 import org.eclipse.jgit.lib.ObjectId
-import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.revwalk.{RevCommit, RevWalk}
 import play.api.libs.json.Json._
 import play.api.libs.json.{Json, Reads}
 
@@ -148,6 +148,19 @@ case class PullRequest(
   val commits = new CReader[CommitOverview, Int](Link.fromListUrl(commits_url))
     with CanList[CommitOverview, Int] // https://developer.github.com/v3/repos/hooks/#get-single-hook
 
+
+  def availableTipCommits(pr: PullRequest)(implicit repoThreadLocal: ThreadLocalObjectDatabaseResources): Set[RevCommit] = {
+    implicit val revWalk = new RevWalk(repoThreadLocal.reader())
+
+    val prUltimateCommitOpt = for {
+      mergeCommitId <- pr.merge_commit_sha
+      mergeCommit <- mergeCommitId.asRevCommitOpt
+    } yield if (mergeCommit.getParentCount == 1) mergeCommit else mergeCommit.getParent(1).asRevCommit
+
+    val prHeadCommitOpt = pr.head.sha.asRevCommitOpt
+
+    prHeadCommitOpt.toSet ++ prUltimateCommitOpt
+  }
 }
 
 object PullRequest {
