@@ -147,11 +147,8 @@ case class PullRequest(
     */
   val commits = new CReader[CommitOverview, Int](Link.fromListUrl(commits_url))
     with CanList[CommitOverview, Int] // https://developer.github.com/v3/repos/hooks/#get-single-hook
-
-
-  def availableTipCommits(implicit repoThreadLocal: ThreadLocalObjectDatabaseResources): Set[RevCommit] = {
-    implicit val revWalk = new RevWalk(repoThreadLocal.reader())
-
+  
+  def availableTipCommits(implicit revWalk: RevWalk): Set[RevCommit] = {
     val prUltimateCommitOpt = for {
       mergeCommitId <- merge_commit_sha
       mergeCommit <- mergeCommitId.asRevCommitOpt
