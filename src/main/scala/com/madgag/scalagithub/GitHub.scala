@@ -98,14 +98,14 @@ object RateLimit {
     lazy val starvationProjection: Option[StarvationProjection] =
       if (consumed > 0) Some(StarvationProjection(consumed)) else None
 
-    val summary = (
-      Some(s"Consumed $consumed/$limit over ${elapsedWindowDuration.toMinutes} mins") ++
-        projectedConsumptionOverEntireQuotaWindow.map(p => s"projected consumption: $p over window") ++
-        starvationProjection.map(_.summary)
-    ).mkString(", ")
-
     val consumptionIsDangerous = (reasonableSampleTimeElapsed || significantQuotaConsumed) &&
       starvationProjection.exists(_.bufferAsProportionOfWindow < 0.2)
+
+    val summary = (
+      Some(s"Consumed $consumed/$limit over ${elapsedWindowDuration.toMinutes} mins") ++
+        projectedConsumptionOverEntireQuotaWindow.map(p => s"projected consumption over window: $p") ++
+        starvationProjection.filter(_ => consumptionIsDangerous).map(_.summary)
+    ).mkString(", ")
   }
 }
 
