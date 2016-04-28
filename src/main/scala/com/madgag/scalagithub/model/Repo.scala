@@ -85,6 +85,11 @@ case class Repo(
   val issues = new CCreator[Issue, Int, CreateIssue](Link.fromSuffixedUrl(issues_url, "/number"))
     with CanGetAndList[Issue, Int]
 
+  val teams = new CanList[Repo.Team, Int] {
+    override val link: Link[Int] = Link.fromListUrl(teams_url)
+    override implicit val readsT: Reads[Repo.Team] = Repo.Team.readsTeam
+  }
+
   val hooks = new CReader[Hook, Int](Link.fromListUrl(hooks_url))
     with CanGetAndList[Hook, Int] // https://developer.github.com/v3/repos/hooks/#get-single-hook
 
@@ -233,7 +238,25 @@ object Permissions {
 }
 
 
+
 object Repo {
+
+  case class Team(
+    id: Long,
+    url: String,
+    name: String,
+    slug: String,
+    description: String,
+    privacy: String,
+    permission: String
+  ) extends Deleteable // https://developer.github.com/v3/orgs/teams/#delete-team
+  {
+    val atSlug = "@" + slug
+  }
+
+  object Team {
+    implicit val readsTeam = Json.reads[Team]
+  }
 
   class Trees(suppliedLink: Link[String]) extends CCreator[Tree, String, CreateTree](suppliedLink) with CanGetAndCreate[Tree, String, CreateTree] {
 
