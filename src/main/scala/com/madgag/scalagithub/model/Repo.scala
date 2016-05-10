@@ -263,7 +263,9 @@ object Repo {
     // https://developer.github.com/v3/git/trees/#get-a-tree
     // https://developer.github.com/v3/git/trees/#create-a-tree
 
-    def getRecursively(sha: String)(implicit g: GitHub, ec: EC) = get(sha) // TODO actually recurse
+    def getRecursively(sha: String)(implicit g: GitHub, ec: EC) = {
+      g.executeAndReadJson[Tree](g.addAuthAndCaching(new Builder().url(link.urlFor(sha)+"?recursive=1")))
+    }
 
   }
 
