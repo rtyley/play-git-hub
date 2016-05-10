@@ -16,6 +16,8 @@
 
 package com.madgag.scalagithub.model
 
+import java.time.ZonedDateTime
+
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.commands._
@@ -60,6 +62,8 @@ case class Repo(
   trees_url: String,
   default_branch: String,
   `private`: Boolean,
+  created_at: ZonedDateTime,
+  updated_at: ZonedDateTime,
   permissions: Option[Permissions]
 ) extends Deleteable // https://developer.github.com/v3/repos/#delete-a-repository
 {

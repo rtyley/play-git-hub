@@ -16,6 +16,8 @@
 
 package com.madgag.time
 
+import _root_.java.time.{Instant, Duration, Clock}
+import _root_.java.time.temporal.Temporal
 import java.util.concurrent.TimeUnit
 
 import java.{time => java}
@@ -25,6 +27,11 @@ import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
 
 object Implicits {
+
+  implicit class RichTemporal(temporal: Temporal) {
+    def age()(implicit clock: Clock = Clock.systemUTC) =
+      Duration.between(Instant.from(temporal), clock.instant())
+  }
 
   implicit def javaZone2JodaDateTimeZone(zoneId: java.ZoneId): joda.DateTimeZone =
     if (zoneId.getId == "Z") joda.DateTimeZone.UTC else joda.DateTimeZone.forID(zoneId.getId)
