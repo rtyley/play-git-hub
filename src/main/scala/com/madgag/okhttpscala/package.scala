@@ -22,6 +22,7 @@ import com.squareup.okhttp._
 import play.api.libs.json.JsValue
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.util.Try
 
 
 package object okhttpscala {
@@ -42,9 +43,9 @@ package object okhttpscala {
         }
 
         override def onResponse(response: Response) {
-          val result: T = processor(response)
+          val resultTry: Try[T] = Try(processor(response))
           response.body.close()
-          p.success(result)
+          p.complete(resultTry)
         }
       })
 
