@@ -16,14 +16,23 @@
 
 package com.madgag.scalagithub.model
 
-import org.scalatest.{FlatSpec, Matchers}
-import play.api.libs.json.{JsResult, Json}
+import org.scalatest.{FlatSpec, Inside, Matchers}
+import play.api.libs.json.{JsResult, JsSuccess, Json}
 
-class PullRequestTest extends FlatSpec with Matchers {
-  "PullRequest" should "be successfully parsed" in {
+class PullRequestTest extends FlatSpec with Matchers with Inside {
+  "git/git PullRequests" should "be successfully parsed" in {
     val json = Json.parse(getClass.getResource("/git.git.pulls.json").openStream())
     val prs: JsResult[Seq[PullRequest]] = Json.fromJson[Seq[PullRequest]](json)
 
     prs.get should have size 30
+  }
+
+  "Closed pull request with empty string for merge_commit_sha" should "be successfully parsed" in {
+    val json = Json.parse(getClass.getResource("/guardian.flexible-content.pull.98.json").openStream())
+    val prJ: JsResult[PullRequest] = Json.fromJson[PullRequest](json)
+
+    inside(prJ) { case JsSuccess(pr, _) =>
+      pr.merge_commit_sha shouldBe None
+    }
   }
 }
