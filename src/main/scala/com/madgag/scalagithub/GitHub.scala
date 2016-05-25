@@ -198,6 +198,8 @@ object GitHub {
 
   implicit class RichEnumerator[T](e: Enumerator[Seq[T]]) {
     def all()(implicit ec: EC): Future[Seq[T]] = e(Iteratee.consume()).flatMap(_.run)
+
+    def takeUpTo(n: Int)(implicit ec: EC): Future[Seq[T]] = e(Iteratee.takeUpTo(n)).flatMap(_.run).map(_.flatten)
   }
 
 }
