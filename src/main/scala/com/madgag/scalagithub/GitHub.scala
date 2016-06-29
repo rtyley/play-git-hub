@@ -466,10 +466,12 @@ class GitHub(ghCredentials: GitHubCredentials) {
     executeAndReadJson(addAuthAndCaching(new Builder().url(commentable.comments_url).get()))
   }
 
-  def executeAndCheck(request: Request)(implicit ec: EC): FR[Boolean] = execute(request) {
-    response =>
-
-    GitHubResponse(logAndGetMeta(request, response), response.code() == 204)
+  def executeAndCheck(request: Request)(implicit ec: EC): FR[Boolean] = execute(request) { response =>
+    val allGood = response.code() == 204
+    if (!allGood) {
+      logger.warn(s"Non-OK response code to ${request.method} ${request.httpUrl} : ${response.code()}\n\n${response.body()}\n\n" )
+    }
+    GitHubResponse(logAndGetMeta(request, response), allGood)
   }
 
   def executeAndReadJson[T](request: Request)(implicit ev: Reads[T], ec: EC): FR[T] = execute(request) {
