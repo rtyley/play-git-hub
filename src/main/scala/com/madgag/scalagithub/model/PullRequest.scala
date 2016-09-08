@@ -92,6 +92,7 @@ case class Issue(
   url: String,
   html_url: String,
   user: User,
+  assignee: Option[User],
   title: String,
   body: Option[String],
   issue_url: String,
