@@ -18,7 +18,7 @@ package com.madgag
 
 import java.io.IOException
 
-import com.squareup.okhttp._
+import okhttp3._
 import play.api.libs.json.JsValue
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -38,11 +38,11 @@ package object okhttpscala {
       val p = Promise[T]()
 
       client.newCall(request).enqueue(new Callback {
-        override def onFailure(request: Request, e: IOException) {
+        override def onFailure(call: Call, e: IOException): Unit = {
           p.failure(e)
         }
 
-        override def onResponse(response: Response) {
+        override def onResponse(call: Call, response: Response): Unit = {
           val resultTry: Try[T] = Try(processor(response))
           response.body.close()
           p.complete(resultTry)

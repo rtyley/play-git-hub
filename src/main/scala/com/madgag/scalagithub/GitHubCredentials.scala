@@ -18,8 +18,7 @@ package com.madgag.scalagithub
 
 import java.nio.file.{Files, Path}
 
-import com.squareup.okhttp
-import com.squareup.okhttp.OkHttpClient
+import okhttp3.OkHttpClient
 import org.eclipse.jgit.transport.{CredentialsProvider, UsernamePasswordCredentialsProvider}
 import play.api.Logger
 
@@ -45,13 +44,13 @@ object GitHubCredentials {
     userDir.toFile.mkdirs()
 
     val okHttpClient = {
-      val client = new OkHttpClient
+      val clientBuilder = new OkHttpClient.Builder()
 
       if (Files.exists(userDir)) {
-        client.setCache(new okhttp.Cache(userDir.toFile, 5 * 1024 * 1024))
+        clientBuilder.cache(new okhttp3.Cache(userDir.toFile, 5 * 1024 * 1024))
       } else Logger.warn(s"Couldn't create HttpResponseCache dir $userDir")
 
-      client
+      clientBuilder.build()
     }
 
     GitHubCredentials(accessKey, okHttpClient)

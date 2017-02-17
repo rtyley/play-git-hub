@@ -21,8 +21,8 @@ import java.time.ZonedDateTime
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.commands._
-import com.squareup.okhttp.HttpUrl
-import com.squareup.okhttp.Request.Builder
+import okhttp3.HttpUrl
+import okhttp3.Request.Builder
 import play.api.libs.iteratee.Enumerator
 import play.api.libs.json.Json._
 import play.api.libs.json.{Json, Reads, Writes}

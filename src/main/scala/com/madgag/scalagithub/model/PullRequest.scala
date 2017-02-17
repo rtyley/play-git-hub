@@ -24,7 +24,7 @@ import com.madgag.scalagithub.GitHub.{FR, _}
 import com.madgag.scalagithub.commands.{CreateComment, MergePullRequest}
 import com.madgag.scalagithub.model.Link.fromListUrl
 import com.madgag.scalagithub.model.PullRequest.CommitOverview
-import com.squareup.okhttp.Request.Builder
+import okhttp3.Request.Builder
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.revwalk.{RevCommit, RevWalk}
 import play.api.libs.json.Json._

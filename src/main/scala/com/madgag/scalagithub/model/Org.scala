@@ -20,7 +20,7 @@ import java.time.ZonedDateTime
 
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.commands.CreateFile
-import com.squareup.okhttp.HttpUrl
+import okhttp3.HttpUrl
 import play.api.libs.json.{Reads, Writes, Json}
 import GitHub._
 

@@ -18,8 +18,8 @@ package com.madgag.slack
 
 import com.madgag.okhttpscala._
 import com.madgag.slack.Slack.Message
-import com.squareup.okhttp.Request.Builder
-import com.squareup.okhttp.{HttpUrl, OkHttpClient}
+import okhttp3.Request.Builder
+import okhttp3.{HttpUrl, OkHttpClient}
 import play.api.Logger
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import play.api.libs.json.Json

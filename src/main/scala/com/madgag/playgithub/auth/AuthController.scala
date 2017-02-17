@@ -20,8 +20,7 @@ import com.madgag.github.GitHubAuthResponse
 import com.madgag.okhttpscala._
 import com.madgag.playgithub.auth.AuthenticatedSessions.AccessToken
 import com.madgag.scalagithub.{GitHub, GitHubCredentials}
-import com.squareup.okhttp
-import com.squareup.okhttp.OkHttpClient
+import okhttp3.OkHttpClient
 import play.api.libs.json.Json
 import play.api.mvc._
 
@@ -33,12 +32,12 @@ trait AuthController extends Controller {
 
   val defaultPage = "/"
 
-  val client = new okhttp.OkHttpClient()
+  val client = new okhttp3.OkHttpClient()
 
   val AccessTokenUrl = "https://github.com/login/oauth/access_token"
 
   def oauthCallback(code: String) = Action.async { req =>
-    val accessTokenRequest = new okhttp.Request.Builder()
+    val accessTokenRequest = new okhttp3.Request.Builder()
       .url(s"$AccessTokenUrl?client_id=${authClient.id}&client_secret=${authClient.secret}&code=$code")
       .addHeader(ACCEPT, "application/json")
       .post(EmptyRequestBody)

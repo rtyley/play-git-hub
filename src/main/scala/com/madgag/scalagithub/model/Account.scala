@@ -20,7 +20,7 @@ import java.time.ZonedDateTime
 
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.FR
-import com.squareup.okhttp.Request.Builder
+import okhttp3.Request.Builder
 import play.api.libs.json.Reads
 
 import scala.concurrent.{ExecutionContext => EC}

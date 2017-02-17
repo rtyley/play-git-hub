@@ -27,9 +27,9 @@ import com.madgag.rfc5988link.{LinkParser, LinkTarget}
 import com.madgag.scalagithub.RateLimit.Status.{ReasonableSampleTime, Window}
 import com.madgag.scalagithub.commands._
 import com.madgag.scalagithub.model._
-import com.squareup.okhttp.Request.Builder
-import com.squareup.okhttp._
-import com.squareup.okhttp.internal.http.HttpDate
+import okhttp3.Request.Builder
+import okhttp3._
+import okhttp3.internal.http.HttpDate
 import play.api.Logger
 import play.api.http.Status._
 import play.api.libs.iteratee.Enumerator.unfoldM
@@ -186,7 +186,7 @@ object GitHub {
 
   def logAndGetMeta(request: Request, response: Response): ResponseMeta = {
     val meta = ResponseMeta.from(response)
-    val mess = s"${meta.rateLimit.hitOrMiss} ${response.code} ${request.method} ${request.httpUrl}"
+    val mess = s"${meta.rateLimit.hitOrMiss} ${response.code} ${request.method} ${request.url}"
     meta.rateLimit.statusOpt.filter(_.consumptionIsDangerous).fold {
       logger.debug(mess)
     } { status =>
@@ -469,7 +469,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
   def executeAndCheck(request: Request)(implicit ec: EC): FR[Boolean] = execute(request) { response =>
     val allGood = response.code() == 204
     if (!allGood) {
-      logger.warn(s"Non-OK response code to ${request.method} ${request.httpUrl} : ${response.code()}\n\n${response.body()}\n\n" )
+      logger.warn(s"Non-OK response code to ${request.method} ${request.url} : ${response.code()}\n\n${response.body()}\n\n" )
     }
     GitHubResponse(logAndGetMeta(request, response), allGood)
   }
@@ -485,7 +485,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
 
     json.validate[T] match {
       case error: JsError =>
-        val message = s"Error decoding ${request.method} ${request.httpUrl} : $error"
+        val message = s"Error decoding ${request.method} ${request.url} : $error"
         logger.warn(s"$message\n\n$json\n\n" )
         throw new RuntimeException(message)
       case JsSuccess(result, _) =>

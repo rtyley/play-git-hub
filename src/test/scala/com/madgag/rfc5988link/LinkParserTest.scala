@@ -17,7 +17,7 @@
 package com.madgag.rfc5988link
 
 import com.madgag.rfc5988link.LinkParser.linkValues
-import com.squareup.okhttp.HttpUrl
+import okhttp3.HttpUrl
 import fastparse.all._
 import org.scalatest._
 

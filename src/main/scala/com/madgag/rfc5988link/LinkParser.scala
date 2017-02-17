@@ -16,7 +16,7 @@
 
 package com.madgag.rfc5988link
 
-import com.squareup.okhttp.HttpUrl
+import okhttp3.HttpUrl
 import fastparse.all._
 
 case class LinkTarget(url: HttpUrl, attributes: Seq[(String, String)]) {

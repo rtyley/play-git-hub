@@ -18,7 +18,7 @@ package com.madgag.scalagithub.model
 
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.FR
-import com.squareup.okhttp.Request.Builder
+import okhttp3.Request.Builder
 
 import scala.concurrent.{ExecutionContext => EC, Future}
 
