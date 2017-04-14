@@ -7,9 +7,9 @@ description := "Group of library code for Play, Git, and GitHub"
 scalaVersion := "2.11.8"
 
 libraryDependencies ++= Seq(
-  "com.typesafe.play" %% "play" % "2.4.10",
+  "com.typesafe.play" %% "play" % "2.4.11",
   "com.squareup.okhttp3" % "okhttp" % "3.6.0",
-  "com.lihaoyi" %% "fastparse" % "0.3.7",
+  "com.lihaoyi" %% "fastparse" % "0.4.2",
   "com.madgag.scala-git" %% "scala-git" % "3.4",
   "com.madgag.scala-git" %% "scala-git-test" % "3.4" % "test",
   "org.scalatest" %% "scalatest" % "2.2.4" % "test"
