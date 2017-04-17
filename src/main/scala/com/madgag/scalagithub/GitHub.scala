@@ -36,9 +36,10 @@ import play.api.libs.iteratee.Enumerator.unfoldM
 import play.api.libs.iteratee.{Enumerator, Iteratee}
 import play.api.libs.json.Json.toJson
 import play.api.libs.json._
+import play.api.mvc.Results.NoContent
 
 import scala.collection.convert.wrapAsScala._
-import scala.concurrent.{ExecutionContext => EC, Future}
+import scala.concurrent.{Future, ExecutionContext => EC}
 import scala.language.implicitConversions
 import scala.math.round
 
@@ -181,9 +182,6 @@ object GitHub {
 
   private val AlwaysHitNetwork = new CacheControl.Builder().maxAge(0, SECONDS).build()
 
-  private val IronmanPreview = "application/vnd.github.ironman-preview+json"
-
-
   def logAndGetMeta(request: Request, response: Response): ResponseMeta = {
     val meta = ResponseMeta.from(response)
     val mess = s"${meta.rateLimit.hitOrMiss} ${response.code} ${request.method} ${request.url}"
@@ -323,9 +321,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
       .addPathSegment(username)
       .build()
 
-    execute(addAuthAndCaching(new Builder().url(url)
-      .addHeader("Accept", IronmanPreview)
-      .get))(_.code() == 204)
+    execute(addAuthAndCaching(new Builder().url(url).get))(_.code == NoContent)
   }
 
   /**
@@ -431,12 +427,10 @@ class GitHub(ghCredentials: GitHubCredentials) {
   }
 
   /**
-    * https://developer.github.com/v3/orgs/teams/#add-team-repo
+    * https://developer.github.com/v3/orgs/teams/#add-or-update-team-repository
+    * PUT /teams/:id/repos/:org/:repo
     */
   def addTeamRepo(teamId: Long, org: String, repoName: String)(implicit ec: EC) = {
-    // curl -X PUT -H "Authorization: token $REPO_MAKER_GITHUB_ACCESS_TOKEN" -H "Accept: application/vnd.github.ironman-preview+json"
-    // -d@bang2.json https://api.github.com/teams/1831886/repos/gu-who-demo-org/150b89c114a
-
     val url = apiUrlBuilder
       .addPathSegment("teams")
       .addPathSegment(teamId.toString)
@@ -445,9 +439,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
       .addPathSegment(repoName)
       .build()
 
-    executeAndCheck(addAuthAndCaching(new Builder().url(url)
-      .addHeader("Accept", IronmanPreview)
-      .put(Json.obj("permission" -> "admin"))))
+    executeAndCheck(addAuthAndCaching(new Builder().url(url).put(Json.obj("permission" -> "admin"))))
   }
 
   /*
