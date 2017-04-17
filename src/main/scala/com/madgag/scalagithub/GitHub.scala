@@ -16,7 +16,7 @@
 
 package com.madgag.scalagithub
 
-import java.time.Duration.{ZERO, ofHours, ofSeconds}
+import java.time.Duration.{ZERO, ofHours, ofMinutes}
 import java.time.ZoneOffset.UTC
 import java.time.format.DateTimeFormatter.ISO_TIME
 import java.time.{Duration, Instant, ZonedDateTime}
@@ -45,7 +45,7 @@ import scala.math.round
 object RateLimit {
   object Status {
     val Window = ofHours(1L)
-    val ReasonableSampleTime = ofSeconds(30)
+    val ReasonableSampleTime = ofMinutes(2)
   }
 
   case class Status(
@@ -65,7 +65,7 @@ object RateLimit {
 
     val reasonableSampleTimeElapsed = elapsedWindowDuration > ReasonableSampleTime
 
-    val significantQuotaConsumed = consumed > limit * 0.2
+    val significantQuotaConsumed = consumed > limit * 0.3
 
     case class StarvationProjection(nonZeroConsumed: Int) {
       assert(nonZeroConsumed > 0)
