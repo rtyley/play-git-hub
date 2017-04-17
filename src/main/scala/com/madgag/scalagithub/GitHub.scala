@@ -118,8 +118,8 @@ case class RateLimit(
 }
 
 case class RequestScopes(
-                          authedScopes: Set[String],
-                          acceptedScopes: Set[String]
+  authedScopes: Set[String],
+  acceptedScopes: Set[String]
 )
 
 case class ResponseMeta(rateLimit: RateLimit, requestScopes: RequestScopes, links: Seq[LinkTarget]) {
@@ -153,11 +153,8 @@ object ResponseMeta {
     linkTargets <- LinkParser.linkValues.parse(linkHeader).get.value
   } yield linkTargets
 
-  def from(response: Response) = {
-    val rateLimit = rateLimitFrom(response)
-    val requestScopes = requestScopesFrom(response)
-    ResponseMeta(rateLimit, requestScopes, linksFrom(response))
-  }
+  def from(resp: Response) =
+    ResponseMeta(rateLimitFrom(resp), requestScopesFrom(resp), linksFrom(resp))
 }
 
 case class GitHubResponse[Result](
