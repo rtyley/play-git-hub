@@ -31,12 +31,12 @@ import okhttp3.Request.Builder
 import okhttp3._
 import okhttp3.internal.http.HttpDate
 import play.api.Logger
+import play.api.http.Status
 import play.api.http.Status._
 import play.api.libs.iteratee.Enumerator.unfoldM
 import play.api.libs.iteratee.{Enumerator, Iteratee}
 import play.api.libs.json.Json.toJson
 import play.api.libs.json._
-import play.api.mvc.Results.NoContent
 
 import scala.collection.convert.wrapAsScala._
 import scala.concurrent.{Future, ExecutionContext => EC}
@@ -318,7 +318,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
       .addPathSegment(username)
       .build()
 
-    execute(addAuthAndCaching(new Builder().url(url).get))(_.code == NoContent)
+    execute(addAuthAndCaching(new Builder().url(url).get))(_.code == Status.NO_CONTENT)
   }
 
   /**

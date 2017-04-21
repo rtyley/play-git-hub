@@ -4,7 +4,7 @@ name := "play-git-hub"
 
 description := "Group of library code for Play, Git, and GitHub"
 
-scalaVersion := "2.11.8"
+scalaVersion := "2.11.11"
 
 libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play" % "2.4.11",
