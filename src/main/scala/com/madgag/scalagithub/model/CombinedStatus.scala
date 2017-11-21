@@ -112,7 +112,7 @@ object CombinedStatus {
     state: String,
     target_url: String,
     description: String,
-    id: Int,
+    id: Long,
     url: String,
     context: String
   )

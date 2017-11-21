@@ -39,7 +39,7 @@ import play.api.libs.json.Json
 }
  */
 case class Hook(
-  id: Int,
+  id: Long,
   url: String,
   active: Boolean,
   config: Map[String, String]
