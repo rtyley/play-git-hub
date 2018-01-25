@@ -112,6 +112,10 @@ case class Repo(
     g.executeAndReadJson(g.addAuthAndCaching(new Builder().url(commits.urlFor(ref) + "/status")))
   }
 
+  def statusesFor(ref: String)(implicit g: GitHub, ec: EC): FR[Seq[Status]] = {
+    g.executeAndReadJson(g.addAuthAndCaching(new Builder().url(commits.urlFor(ref) + "/statuses")))
+  }
+
   val settingsUrl = s"$html_url/settings"
 
   val collaborationSettingsUrl = s"$settingsUrl/collaboration"
