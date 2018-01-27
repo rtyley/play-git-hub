@@ -4,7 +4,7 @@ name := "play-git-hub"
 
 description := "Group of library code for Play, Git, and GitHub"
 
-scalaVersion := "2.11.11"
+scalaVersion := "2.11.12"
 
 libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play" % "2.4.11",
@@ -26,6 +26,8 @@ scmInfo := Some(ScmInfo(
 
 licenses := Seq("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0"))
 
+publishTo := sonatypePublishTo.value
+
 import ReleaseTransformations._
 
 releaseProcess := Seq[ReleaseStep](
@@ -36,9 +38,9 @@ releaseProcess := Seq[ReleaseStep](
   setReleaseVersion,
   commitReleaseVersion,
   tagRelease,
-  ReleaseStep(action = Command.process("publishSigned", _)),
+  releaseStepCommand("publishSigned"),
   setNextVersion,
   commitNextVersion,
-  ReleaseStep(action = Command.process("sonatypeReleaseAll", _)),
+  releaseStepCommand("sonatypeReleaseAll"),
   pushChanges
 )
