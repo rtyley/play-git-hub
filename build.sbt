@@ -7,6 +7,7 @@ description := "Group of library code for Play, Git, and GitHub"
 scalaVersion := "2.11.12"
 
 libraryDependencies ++= Seq(
+  "com.madgag" %% "rate-limit-status" % "0.4",
   "com.typesafe.play" %% "play" % "2.4.11",
   "com.squareup.okhttp3" % "okhttp" % "3.6.0",
   "com.lihaoyi" %% "fastparse" % "0.4.2",

@@ -16,15 +16,13 @@
 
 package com.madgag.scalagithub
 
-import java.time.Duration.{ZERO, ofHours, ofMinutes}
-import java.time.ZoneOffset.UTC
-import java.time.format.DateTimeFormatter.ISO_TIME
-import java.time.{Duration, Instant, ZonedDateTime}
+import java.time.Duration.ofHours
+import java.time.Instant
 import java.util.concurrent.TimeUnit.SECONDS
 
 import com.madgag.okhttpscala._
+import com.madgag.ratelimitstatus.{QuotaUpdate, RateLimit}
 import com.madgag.rfc5988link.{LinkParser, LinkTarget}
-import com.madgag.scalagithub.RateLimit.Status.{ReasonableSampleTime, Window}
 import com.madgag.scalagithub.commands._
 import com.madgag.scalagithub.model._
 import okhttp3.Request.Builder
@@ -41,76 +39,8 @@ import play.api.libs.json._
 import scala.collection.convert.wrapAsScala._
 import scala.concurrent.{Future, ExecutionContext => EC}
 import scala.language.implicitConversions
-import scala.math.round
 
-object RateLimit {
-  object Status {
-    val Window = ofHours(1L)
-    val ReasonableSampleTime = ofMinutes(2)
-  }
-
-  case class Status(
-    remaining: Int,
-    limit: Int,
-    reset: Instant,
-    capturedAt: Instant
-  ) {
-
-    val dateOrdering = implicitly[Ordering[Duration]]
-    import dateOrdering._
-
-    val consumed = limit - remaining
-    val previousReset = reset.minus(Window)
-    val elapsedWindowDuration = Duration.between(previousReset, capturedAt)
-    lazy val resetTimeString = ISO_TIME.format(ZonedDateTime.ofInstant(reset, UTC))
-
-    val reasonableSampleTimeElapsed = elapsedWindowDuration > ReasonableSampleTime
-
-    val significantQuotaConsumed = consumed > limit * 0.3
-
-    case class StarvationProjection(nonZeroConsumed: Int) {
-      assert(nonZeroConsumed > 0)
-
-      val averageTimeToConsumeOneUnitOfQuota = elapsedWindowDuration dividedBy nonZeroConsumed
-
-      val projectedTimeToExceedingLimit = averageTimeToConsumeOneUnitOfQuota multipliedBy remaining
-
-      val projectedInstantLimitWouldBeExceededWithoutReset = capturedAt plus projectedTimeToExceedingLimit
-
-      // the smaller this number, the worse things are - negative numbers indicate starvation
-      val bufferDurationBetweenResetAndLimitBeingExceeded =
-        Duration.between(reset, projectedInstantLimitWouldBeExceededWithoutReset)
-
-      val bufferAsProportionOfWindow =
-        bufferDurationBetweenResetAndLimitBeingExceeded.toMillis.toFloat / Window.toMillis
-
-      lazy val summary = {
-        val mins = s"${bufferDurationBetweenResetAndLimitBeingExceeded.abs.toMinutes} mins"
-        if (bufferDurationBetweenResetAndLimitBeingExceeded.isNegative) {
-          s"will exceed quota $mins before reset occurs at $resetTimeString"
-        } else s"would exceed quota $mins after reset"
-      }
-    }
-
-    val projectedConsumptionOverEntireQuotaWindow: Option[Int] = if (elapsedWindowDuration <= ZERO) None else {
-      Some(round(consumed * (Window.toNanos.toFloat / elapsedWindowDuration.toNanos)))
-    }
-
-    lazy val starvationProjection: Option[StarvationProjection] =
-      if (consumed > 0) Some(StarvationProjection(consumed)) else None
-
-    val consumptionIsDangerous = (reasonableSampleTimeElapsed || significantQuotaConsumed) &&
-      starvationProjection.exists(_.bufferAsProportionOfWindow < 0.2)
-
-    val summary = (
-      Some(s"Consumed $consumed/$limit over ${elapsedWindowDuration.toMinutes} mins") ++
-        projectedConsumptionOverEntireQuotaWindow.map(p => s"projected consumption over window: $p") ++
-        starvationProjection.filter(_ => consumptionIsDangerous).map(_.summary)
-    ).mkString(", ")
-  }
-}
-
-case class RateLimit(
+case class Quota(
   consumed: Int,
   statusOpt: Option[RateLimit.Status]
 ) {
@@ -122,22 +52,23 @@ case class RequestScopes(
   acceptedScopes: Set[String]
 )
 
-case class ResponseMeta(rateLimit: RateLimit, requestScopes: RequestScopes, links: Seq[LinkTarget]) {
+case class ResponseMeta(quota: Quota, requestScopes: RequestScopes, links: Seq[LinkTarget]) {
   val nextOpt: Option[HttpUrl] = links.find(_.relOpt.contains("next")).map(_.url)
 }
 
 object ResponseMeta {
+  val GitHubRateLimit = RateLimit(ofHours(1))
 
-  def rateLimitStatusFrom(response: Response) = RateLimit.Status(
+  def rateLimitStatusFrom(response: Response) = GitHubRateLimit.statusFor(QuotaUpdate(
     remaining = response.header("X-RateLimit-Remaining").toInt,
     limit = response.header("X-RateLimit-Limit").toInt,
     reset = Instant.ofEpochSecond(response.header("X-RateLimit-Reset").toLong),
     capturedAt = HttpDate.parse(response.header("Date")).toInstant
-  )
+  ))
 
-  def rateLimitFrom(response: Response): RateLimit = {
+  def rateLimitFrom(response: Response): Quota = {
     val networkResponse = Option(response.networkResponse())
-    RateLimit(
+    Quota(
       consumed = if (networkResponse.exists(_.code != NOT_MODIFIED)) 1 else 0,
       networkResponse.map(rateLimitStatusFrom)
     )
@@ -181,8 +112,8 @@ object GitHub {
 
   def logAndGetMeta(request: Request, response: Response): ResponseMeta = {
     val meta = ResponseMeta.from(response)
-    val mess = s"${meta.rateLimit.hitOrMiss} ${response.code} ${request.method} ${request.url}"
-    meta.rateLimit.statusOpt.filter(_.consumptionIsDangerous).fold {
+    val mess = s"${meta.quota.hitOrMiss} ${response.code} ${request.method} ${request.url}"
+    meta.quota.statusOpt.filter(_.consumptionIsDangerous).fold {
       logger.debug(mess)
     } { status =>
       logger.warn(s"$mess ${status.summary}")
