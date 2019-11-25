@@ -17,7 +17,7 @@
 package com.madgag.rfc5988link
 
 import okhttp3.HttpUrl
-import fastparse.all._
+import fastparse._, NoWhitespace._
 
 case class LinkTarget(url: HttpUrl, attributes: Seq[(String, String)]) {
 
@@ -27,15 +27,14 @@ case class LinkTarget(url: HttpUrl, attributes: Seq[(String, String)]) {
 }
 
 object LinkParser {
-  val url: P[HttpUrl] = P("<" ~ CharsWhile(_ != '>', min = 1).! ~ ">").map(HttpUrl.parse)
+  def url[_: P]: P[HttpUrl] = P("<" ~/ CharsWhile(_ != '>', 1).! ~ ">").map(HttpUrl.parse)
 
-  val linkParam: P[(String, String)] =
-    P("; " ~ CharsWhile(_ != '=', min = 1).! ~ "=\"" ~ CharsWhile(_ != '"', min = 1).! ~ "\"" )
+  def linkParam[_: P]: P[(String, String)] =
+    P("; " ~ CharsWhile(_ != '=',1).! ~ "=\"" ~ CharsWhile(_ != '"',1).! ~ "\"" )
 
-  val linkTarget: P[LinkTarget] = (url ~ linkParam.rep).map {
+  def linkTarget[_: P]: P[LinkTarget] = (url ~ linkParam.rep).map {
     case (a, b) => LinkTarget(a, b)
   }
 
-  val linkValues: P[Seq[LinkTarget]] = linkTarget.rep(sep = ", ")
-
+  def linkValues[_: P]: P[Seq[LinkTarget]] = linkTarget.rep(sep = ", ")
 }

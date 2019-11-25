@@ -4,16 +4,16 @@ name := "play-git-hub"
 
 description := "Group of library code for Play, Git, and GitHub"
 
-scalaVersion := "2.11.12"
+scalaVersion := "2.13.3"
 
 libraryDependencies ++= Seq(
-  "com.madgag" %% "rate-limit-status" % "0.4",
-  "com.typesafe.play" %% "play" % "2.4.11",
+  "com.madgag" %% "rate-limit-status" % "0.5",
+  "com.typesafe.play" %% "play" % "2.7.5",
   "com.squareup.okhttp3" % "okhttp" % "3.6.0",
-  "com.lihaoyi" %% "fastparse" % "0.4.2",
-  "com.madgag.scala-git" %% "scala-git" % "3.4",
-  "com.madgag.scala-git" %% "scala-git-test" % "3.4" % "test",
-  "org.scalatest" %% "scalatest" % "2.2.4" % "test"
+  "com.lihaoyi" %% "fastparse" % "2.1.3",
+  "com.madgag.scala-git" %% "scala-git" % "4.3",
+  "com.madgag.scala-git" %% "scala-git-test" % "4.3" % "test",
+  "org.scalatest" %% "scalatest" % "3.0.8" % "test"
 )
 
 resolvers += Resolver.sonatypeRepo("releases")
@@ -27,7 +27,7 @@ scmInfo := Some(ScmInfo(
 
 licenses := Seq("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0"))
 
-publishTo := sonatypePublishTo.value
+publishTo in ThisBuild := sonatypePublishToBundle.value
 
 import ReleaseTransformations._
 
@@ -39,9 +39,9 @@ releaseProcess := Seq[ReleaseStep](
   setReleaseVersion,
   commitReleaseVersion,
   tagRelease,
-  releaseStepCommand("publishSigned"),
+  releaseStepCommandAndRemaining("publishSigned"),
+  releaseStepCommand("sonatypeBundleRelease"),
   setNextVersion,
   commitNextVersion,
-  releaseStepCommand("sonatypeReleaseAll"),
   pushChanges
 )
