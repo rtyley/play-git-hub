@@ -1,6 +1,8 @@
 # play-git-hub
 
-A common library of Play/Scala code for creating GitHub-related webapps.
+_A common library of Play/Scala code for creating GitHub-related webapps_
+
+[![play-git-hub artifacts](https://index.scala-lang.org/rtyley/play-git-hub/play-git-hub/latest-by-scala-version.svg)](https://index.scala-lang.org/rtyley/play-git-hub/play-git-hub/)
 
 Used in:
 
