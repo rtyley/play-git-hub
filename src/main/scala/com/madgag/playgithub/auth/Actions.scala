@@ -16,33 +16,32 @@
 
 package com.madgag.playgithub.auth
 
-import java.nio.file.Path
-
 import com.madgag.playgithub.auth.AuthenticatedSessions.{AccessToken, RedirectToPathAfterAuthKey}
 import com.madgag.scalagithub.GitHubCredentials
 import play.api.mvc.Security.{AuthenticatedBuilder, AuthenticatedRequest}
 import play.api.mvc._
 
-import scala.concurrent.Future
+import java.nio.file.Path
+import scala.concurrent.{ExecutionContext, Future}
 
 
 object Actions {
 
   type AuthRequest[A] = AuthenticatedRequest[A, GitHubCredentials]
 
-  private def gitHubAuthenticatedAction(scopes: Seq[String], workingDir: Path)(
-    implicit authClient: Client, accessTokenProvider: AccessToken.Provider
-  ) =
-    new AuthenticatedBuilder(
-      request => accessTokenProvider(request).flatMap(accessKey => GitHubCredentials.forAccessKey(accessKey, workingDir).toOption),
-      implicit req => authClient.redirectForAuthWith(scopes).addingToSession(RedirectToPathAfterAuthKey -> req.path)
-    )
-
-  private val AuthenticatedActionToGHRequest = new ActionTransformer[AuthRequest, GHRequest] {
+  class GitHubAuthenticatedAction(scopes: Seq[String], workingDir: Path, parser: BodyParser[AnyContent])(
+    implicit ec: ExecutionContext, authClient: Client, accessTokenProvider: AccessToken.Provider
+  ) extends AuthenticatedBuilder[GitHubCredentials](
+    { req: RequestHeader => accessTokenProvider(req).flatMap(accessKey => GitHubCredentials.forAccessKey(accessKey, workingDir).toOption) },
+    parser,
+    onUnauthorized = implicit req => authClient.redirectForAuthWith(scopes).addingToSession(RedirectToPathAfterAuthKey -> req.path)
+  )
+  class AuthenticatedActionToGHRequest(implicit val executionContext: ExecutionContext)
+    extends ActionTransformer[AuthRequest, GHRequest] {
     def transform[A](request: AuthRequest[A]) = Future.successful(new GHRequest[A](request.user, request))
   }
   
-  def gitHubAction(scopes: Seq[String], workingDir: Path)(implicit authClient: Client, accessTokenProvider: AccessToken.Provider) =
-    gitHubAuthenticatedAction(scopes, workingDir) andThen AuthenticatedActionToGHRequest
+  def gitHubAction(scopes: Seq[String], workingDir: Path, parser: BodyParser[AnyContent])(implicit authClient: Client, accessTokenProvider: AccessToken.Provider, ec: ExecutionContext) =
+    (new GitHubAuthenticatedAction(scopes, workingDir, parser)) andThen (new AuthenticatedActionToGHRequest)
 
 }

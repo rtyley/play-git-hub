@@ -4,16 +4,17 @@ name := "play-git-hub"
 
 description := "Group of library code for Play, Git, and GitHub"
 
-scalaVersion := "2.11.12"
+scalaVersion := "2.13.7"
 
 libraryDependencies ++= Seq(
-  "com.madgag" %% "rate-limit-status" % "0.4",
-  "com.typesafe.play" %% "play" % "2.4.11",
-  "com.squareup.okhttp3" % "okhttp" % "3.6.0",
-  "com.lihaoyi" %% "fastparse" % "0.4.2",
-  "com.madgag.scala-git" %% "scala-git" % "3.4",
-  "com.madgag.scala-git" %% "scala-git-test" % "3.4" % "test",
-  "org.scalatest" %% "scalatest" % "2.2.4" % "test"
+  "com.madgag" %% "rate-limit-status" % "0.7",
+  "com.typesafe.play" %% "play" % "2.8.8",
+  "com.squareup.okhttp3" % "okhttp" % "3.12.13",
+  "com.lihaoyi" %% "fastparse" % "2.3.3",
+  "com.madgag" %% "scala-collection-plus" % "0.9",
+  "com.madgag.scala-git" %% "scala-git" % "4.3",
+  "com.madgag.scala-git" %% "scala-git-test" % "4.3" % Test,
+  "org.scalatest" %% "scalatest" % "3.2.9" % Test
 )
 
 resolvers += Resolver.sonatypeRepo("releases")
@@ -40,8 +41,8 @@ releaseProcess := Seq[ReleaseStep](
   commitReleaseVersion,
   tagRelease,
   releaseStepCommand("publishSigned"),
+  releaseStepCommand("sonatypeBundleRelease"),
   setNextVersion,
   commitNextVersion,
-  releaseStepCommand("sonatypeReleaseAll"),
   pushChanges
 )

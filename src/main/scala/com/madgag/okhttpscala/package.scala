@@ -16,13 +16,12 @@
 
 package com.madgag
 
-import java.io.IOException
-
 import okhttp3._
 import play.api.libs.json.JsValue
 
-import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.util.Try
+import java.io.IOException
+import _root_.scala.concurrent.{ExecutionContext, Future, Promise}
+import _root_.scala.util.Try
 
 
 package object okhttpscala {

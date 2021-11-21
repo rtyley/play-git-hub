@@ -17,17 +17,16 @@
 package com.madgag
 
 import org.eclipse.jgit.lib.ObjectId
-import play.api.data.validation.ValidationError
 import play.api.libs.json._
 
 package object scalagithub {
 
-  implicit val formatsObjectId = new Format[ObjectId] {
+  implicit val formatsObjectId: Format[ObjectId] = new Format[ObjectId] {
     override def reads(json: JsValue): JsResult[ObjectId] = json match {
       case JsString(s) => try JsSuccess(ObjectId.fromString(s)) catch {
-        case e: RuntimeException => JsError(Seq(JsPath() -> Seq(ValidationError(e.getMessage))))
+        case e: RuntimeException => JsError(Seq(JsPath() -> Seq(JsonValidationError(e.getMessage))))
       }
-      case o: JsValue => JsError(Seq(JsPath() -> Seq(ValidationError(s"Expected string (not $o) for ObjectId"))))
+      case o: JsValue => JsError(Seq(JsPath() -> Seq(JsonValidationError(s"Expected string (not $o) for ObjectId"))))
     }
 
     override def writes(o: ObjectId) = JsString(o.name)

@@ -17,10 +17,9 @@
 package com.madgag.scalagithub
 
 import java.nio.file.{Files, Path}
-
 import okhttp3.OkHttpClient
 import org.eclipse.jgit.transport.{CredentialsProvider, UsernamePasswordCredentialsProvider}
-import play.api.Logger
+import play.api.{Logger, Logging}
 
 import scala.util.Try
 
@@ -33,7 +32,7 @@ Stuff you might want to know:
 * The API url - "https://api.github.com" and also the OAuth url, eg: https://github.com/login/oauth/authorize
  */
 
-object GitHubCredentials {
+object GitHubCredentials extends Logging {
 
   def forAccessKey(accessKey: String, workingDir: Path): Try[GitHubCredentials] = Try {
 
@@ -48,7 +47,7 @@ object GitHubCredentials {
 
       if (Files.exists(userDir)) {
         clientBuilder.cache(new okhttp3.Cache(userDir.toFile, 5 * 1024 * 1024))
-      } else Logger.warn(s"Couldn't create HttpResponseCache dir $userDir")
+      } else logger.warn(s"Couldn't create HttpResponseCache dir $userDir")
 
       clientBuilder.build()
     }

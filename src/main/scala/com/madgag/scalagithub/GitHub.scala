@@ -16,10 +16,12 @@
 
 package com.madgag.scalagithub
 
+import akka.NotUsed
+import akka.stream.scaladsl.Source
+
 import java.time.Duration.ofHours
 import java.time.Instant
 import java.util.concurrent.TimeUnit.SECONDS
-
 import com.madgag.okhttpscala._
 import com.madgag.ratelimitstatus.{QuotaUpdate, RateLimit}
 import com.madgag.rfc5988link.{LinkParser, LinkTarget}
@@ -31,14 +33,13 @@ import okhttp3.internal.http.HttpDate
 import play.api.Logger
 import play.api.http.Status
 import play.api.http.Status._
-import play.api.libs.iteratee.Enumerator.unfoldM
-import play.api.libs.iteratee.{Enumerator, Iteratee}
 import play.api.libs.json.Json.toJson
 import play.api.libs.json._
 
-import scala.collection.convert.wrapAsScala._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.{Future, ExecutionContext => EC}
 import scala.language.implicitConversions
+import fastparse._, NoWhitespace._
 
 case class Quota(
   consumed: Int,
@@ -80,8 +81,8 @@ object ResponseMeta {
   )
 
   def linksFrom(response: Response): Seq[LinkTarget] = for {
-    linkHeader <- response.headers("Link")
-    linkTargets <- LinkParser.linkValues.parse(linkHeader).get.value
+    linkHeader <- response.headers("Link").asScala.toSeq
+    linkTargets <- parse(linkHeader, LinkParser.linkValues(_)).get.value
   } yield linkTargets
 
   def from(resp: Response) =
@@ -119,13 +120,6 @@ object GitHub {
       logger.warn(s"$mess ${status.summary}")
     }
     meta
-  }
-
-
-  implicit class RichEnumerator[T](e: Enumerator[Seq[T]]) {
-    def all()(implicit ec: EC): Future[Seq[T]] = e(Iteratee.consume()).flatMap(_.run)
-
-    def takeUpTo(n: Int)(implicit ec: EC): Future[Seq[T]] = e(Iteratee.takeUpTo(n)).flatMap(_.run).map(_.flatten)
   }
 
 }
@@ -220,21 +214,21 @@ class GitHub(ghCredentials: GitHubCredentials) {
     executeAndReadJson(addAuthAndCaching(new Builder().url(repo.trees.urlFor(sha)+"?recursive=1")))
   }
 
-  def followAndEnumerate[T](url: HttpUrl)(implicit ev: Reads[T], ec: EC): Enumerator[Seq[T]] = unfoldM(Option(url)) {
-    _.map { nextUrl =>
+  def followAndEnumerate[T](url: HttpUrl)(implicit ev: Reads[T], ec: EC): Source[Seq[T], NotUsed] = Source.unfoldAsync[Option[HttpUrl],Seq[T]](Some(url)) {
+    case Some(nextUrl) =>
       logger.debug(s"Following $nextUrl")
       for {
         response <- executeAndReadJson[Seq[T]](addAuthAndCaching(new Builder().url(nextUrl)))
       } yield Some(response.responseMeta.nextOpt -> response.result)
-    }.getOrElse(Future.successful(None))
+    case None => Future.successful(None)
   }
 
   /**
     * https://developer.github.com/v3/repos/#list-your-repositories
     */
-  def listRepos(sort: String, direction: String)(implicit ec: EC): Enumerator[Seq[Repo]] = {
+  def listRepos(sort: String, direction: String)(implicit ec: EC): Source[Seq[Repo], NotUsed] = {
     // GET /user/repos
-    followAndEnumerate(apiUrlBuilder
+    followAndEnumerate[Repo](apiUrlBuilder
       .addPathSegment("user")
       .addPathSegment("repos")
       .build())
