@@ -30,6 +30,7 @@ import play.api.libs.json.{Json, Reads}
 
 import java.time.ZonedDateTime
 import scala.concurrent.{ExecutionContext => EC}
+import com.madgag.scalagithub._
 
 case class CommitPointer(
   ref: String,
