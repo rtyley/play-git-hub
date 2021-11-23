@@ -16,10 +16,11 @@
 
 package com.madgag.scalagithub.model
 
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should
 import play.api.libs.json.{JsResult, Json}
 
-class PullRequestTest extends FlatSpec with Matchers {
+class PullRequestTest extends AnyFlatSpec with should.Matchers {
   "PullRequest" should "be successfully parsed" in {
     val json = Json.parse(getClass.getResource("/git.git.pulls.json").openStream())
     val prs: JsResult[Seq[PullRequest]] = Json.fromJson[Seq[PullRequest]](json)

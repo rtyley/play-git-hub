@@ -16,17 +16,17 @@
 
 package com.madgag.scalagithub.model
 
-import java.time.ZonedDateTime
-
+import akka.NotUsed
+import akka.stream.scaladsl.Source
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.commands._
 import okhttp3.HttpUrl
 import okhttp3.Request.Builder
-import play.api.libs.iteratee.Enumerator
 import play.api.libs.json.Json._
 import play.api.libs.json.{Json, Reads, Writes}
 
+import java.time.ZonedDateTime
 import scala.concurrent.{ExecutionContext => EC}
 
 object RepoId {
@@ -167,7 +167,7 @@ trait CanList[T, ID] extends Reader[T] {
 
   val link: Link[ID]
 
-  def list(params: Map[String, String] = Map.empty)(implicit g: GitHub, ec: EC): Enumerator[Seq[T]] = {
+  def list(params: Map[String, String] = Map.empty)(implicit g: GitHub, ec: EC): Source[Seq[T],NotUsed] = {
     val initialUrl = HttpUrl.parse(link.listUrl).newBuilder()
     params.foreach { case (k, v) => initialUrl.addQueryParameter(k, v) }
     g.followAndEnumerate(initialUrl.build())

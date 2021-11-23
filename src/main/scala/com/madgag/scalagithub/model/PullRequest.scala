@@ -16,8 +16,6 @@
 
 package com.madgag.scalagithub.model
 
-import java.time.ZonedDateTime
-
 import com.madgag.git._
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.{FR, _}
@@ -30,11 +28,8 @@ import org.eclipse.jgit.revwalk.{RevCommit, RevWalk}
 import play.api.libs.json.Json._
 import play.api.libs.json.{Json, Reads}
 
+import java.time.ZonedDateTime
 import scala.concurrent.{ExecutionContext => EC}
-
-import GitHub._
-import com.madgag.scalagithub._
-
 
 case class CommitPointer(
   ref: String,
@@ -179,7 +174,7 @@ object PullRequest {
       message: String,
       comment_count: Int
     ) {
-      val subject: String = message.lines.next()
+      val subject: String = message.linesIterator.next()
     }
 
     implicit val readsCommitOverview: Reads[CommitOverview] = Json.reads[CommitOverview]

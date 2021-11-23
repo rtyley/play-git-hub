@@ -26,7 +26,7 @@ import play.api.mvc._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
-trait AuthController extends Controller {
+trait AuthController extends BaseController {
 
   val authClient: Client
 
@@ -36,7 +36,7 @@ trait AuthController extends Controller {
 
   val AccessTokenUrl = "https://github.com/login/oauth/access_token"
 
-  def oauthCallback(code: String) = Action.async { req =>
+  def oauthCallback(code: String): Action[AnyContent] = Action.async { req =>
     val accessTokenRequest = new okhttp3.Request.Builder()
       .url(s"$AccessTokenUrl?client_id=${authClient.id}&client_secret=${authClient.secret}&code=$code")
       .addHeader(ACCEPT, "application/json")
@@ -57,7 +57,7 @@ trait AuthController extends Controller {
     }
   }
 
-  def logout = Action {
+  def logout: Action[AnyContent] = Action {
     Redirect(defaultPage).withNewSession
   }
 }
