@@ -1,3 +1,5 @@
+sonatypeCredentialHost := "s01.oss.sonatype.org"
+
 sonatypeProfileName := "com.madgag"
 
 ThisBuild / pomExtra := (

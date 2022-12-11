@@ -4,20 +4,23 @@ name := "play-git-hub"
 
 description := "Group of library code for Play, Git, and GitHub"
 
-scalaVersion := "2.13.7"
+scalaVersion := "2.13.10"
 
 libraryDependencies ++= Seq(
   "com.madgag" %% "rate-limit-status" % "0.7",
-  "com.typesafe.play" %% "play" % "2.8.8",
+  "com.typesafe.play" %% "play" % "2.8.18",
   "com.squareup.okhttp3" % "okhttp" % "3.12.13",
   "com.lihaoyi" %% "fastparse" % "2.3.3",
-  "com.madgag" %% "scala-collection-plus" % "0.9",
+  "com.madgag" %% "scala-collection-plus" % "0.11",
   "com.madgag.scala-git" %% "scala-git" % "4.3",
   "com.madgag.scala-git" %% "scala-git-test" % "4.3" % Test,
-  "org.scalatest" %% "scalatest" % "3.2.9" % Test
+  "org.scalatest" %% "scalatest" % "3.2.14" % Test
 )
 
-resolvers += Resolver.sonatypeRepo("releases")
+resolvers ++= Resolver.sonatypeOssRepos("releases")
+
+Test / testOptions +=
+  Tests.Argument(TestFrameworks.ScalaTest, "-u", s"test-results/scala-${scalaVersion.value}")
 
 updateOptions := updateOptions.value.withCachedResolution(true)
 
