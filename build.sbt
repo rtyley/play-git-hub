@@ -12,8 +12,8 @@ libraryDependencies ++= Seq(
   "com.squareup.okhttp3" % "okhttp" % "3.12.13",
   "com.lihaoyi" %% "fastparse" % "2.3.3",
   "com.madgag" %% "scala-collection-plus" % "0.11",
-  "com.madgag.scala-git" %% "scala-git" % "4.3",
-  "com.madgag.scala-git" %% "scala-git-test" % "4.3" % Test,
+  "com.madgag.scala-git" %% "scala-git" % "4.5",
+  "com.madgag.scala-git" %% "scala-git-test" % "4.5" % Test,
   "org.scalatest" %% "scalatest" % "3.2.14" % Test
 )
 
