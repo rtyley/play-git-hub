@@ -58,20 +58,20 @@ case class ResponseMeta(quota: Quota, requestScopes: RequestScopes, links: Seq[L
 }
 
 object ResponseMeta {
-  val GitHubRateLimit = RateLimit(ofHours(1))
+  val GitHubRateLimit: RateLimit = RateLimit(ofHours(1))
 
-  def rateLimitStatusFrom(response: Response) = GitHubRateLimit.statusFor(QuotaUpdate(
-    remaining = response.header("X-RateLimit-Remaining").toInt,
-    limit = response.header("X-RateLimit-Limit").toInt,
-    reset = Instant.ofEpochSecond(response.header("X-RateLimit-Reset").toLong),
-    capturedAt = HttpDate.parse(response.header("Date")).toInstant
+  def rateLimitStatusFrom(headers: Headers): RateLimit.Status = GitHubRateLimit.statusFor(QuotaUpdate(
+    remaining = headers.get("X-RateLimit-Remaining").toInt,
+    limit = headers.get("X-RateLimit-Limit").toInt,
+    reset = Instant.ofEpochSecond(headers.get("X-RateLimit-Reset").toLong),
+    capturedAt = HttpDate.parse(headers.get("Date")).toInstant
   ))
 
   def rateLimitFrom(response: Response): Quota = {
     val networkResponse = Option(response.networkResponse())
     Quota(
       consumed = if (networkResponse.exists(_.code != NOT_MODIFIED)) 1 else 0,
-      networkResponse.map(rateLimitStatusFrom)
+      networkResponse.map(resp => rateLimitStatusFrom(resp.headers))
     )
   }
 
@@ -131,7 +131,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
     // GET /rate_limit  https://developer.github.com/v3/rate_limit/
     val url = apiUrlBuilder.addPathSegment("rate_limit").build()
 
-    execute(addAuth(new Builder().url(url).get).build())(ResponseMeta.rateLimitStatusFrom)
+    execute(addAuth(new Builder().url(url).get).build())(resp => ResponseMeta.rateLimitStatusFrom(resp.headers))
   }
 
   /**
