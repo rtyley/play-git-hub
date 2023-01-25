@@ -9,12 +9,12 @@ scalaVersion := "2.13.10"
 libraryDependencies ++= Seq(
   "com.madgag" %% "rate-limit-status" % "0.7",
   "com.typesafe.play" %% "play" % "2.8.18",
-  "com.squareup.okhttp3" % "okhttp" % "3.12.13",
+  "com.squareup.okhttp3" % "okhttp" % "3.14.9",
   "com.lihaoyi" %% "fastparse" % "2.3.3",
   "com.madgag" %% "scala-collection-plus" % "0.11",
   "com.madgag.scala-git" %% "scala-git" % "4.6",
   "com.madgag.scala-git" %% "scala-git-test" % "4.6" % Test,
-  "org.scalatest" %% "scalatest" % "3.2.14" % Test
+  "org.scalatest" %% "scalatest" % "3.2.15" % Test
 )
 
 resolvers ++= Resolver.sonatypeOssRepos("releases")
