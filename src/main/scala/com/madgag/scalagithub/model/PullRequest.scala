@@ -19,18 +19,21 @@ package com.madgag.scalagithub.model
 import com.madgag.git._
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.{FR, _}
-import com.madgag.scalagithub.commands.{CreateComment, MergePullRequest}
+import com.madgag.scalagithub.commands.{CreateComment, MergePullRequest, UpdateIssue}
 import com.madgag.scalagithub.model.Link.fromListUrl
 import com.madgag.scalagithub.model.PullRequest.CommitOverview
 import okhttp3.Request.Builder
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.revwalk.{RevCommit, RevWalk}
 import play.api.libs.json.Json._
-import play.api.libs.json.{Json, Reads}
+import play.api.libs.json.{Format, JsError, JsPath, JsResult, JsString, JsSuccess, JsValue, Json, JsonValidationError, Reads, Writes}
 
 import java.time.ZonedDateTime
 import scala.concurrent.{ExecutionContext => EC}
 import com.madgag.scalagithub._
+import com.madgag.scalagithub.model.Issue.State.Closed
+
+import scala.util.Try
 
 case class CommitPointer(
   ref: String,
@@ -54,6 +57,15 @@ trait Commentable {
   // https://developer.github.com/v3/issues/comments/#create-a-comment
 }
 
+trait HasApiUrl {
+  val url: String
+}
+trait Updateable[I, Update] extends HasApiUrl {
+  def update(update: Update)(implicit g: GitHub, ec: EC,writeUpdate: Writes[Update], reads: Reads[I]): FR[I] = {
+    g.executeAndReadJson[I](g.addAuth(new Builder().url(url).put(toJson(update))).build())
+  }
+}
+
 trait HasLabels {
   val issue_url: String
 
@@ -75,6 +87,9 @@ object PullRequestId {
 }
 
 
+case class IssueId(repo: RepoId, num: Int) {
+  lazy val slug = s"${repo.fullName}/issues/$num"
+}
 case class PullRequestId(repo: RepoId, num: Int) {
   lazy val slug = s"${repo.fullName}/pull/$num"
 }
@@ -85,6 +100,7 @@ trait Createable {
 
 case class Issue(
   number: Int,
+  state: Issue.State,
   url: String,
   html_url: String,
   user: User,
@@ -95,10 +111,31 @@ case class Issue(
   created_at: Option[ZonedDateTime] = None,
   comments_url: String,
   comments: Option[Int]
-) extends Commentable with HasLabels
+) extends Commentable with HasLabels with Updateable[Issue, UpdateIssue] {
+  def close()(implicit g: GitHub, ec: EC): FR[Issue] = update(UpdateIssue(state=Closed))
+}
 
 object Issue {
-  implicit val readsIssue = Json.reads[Issue]
+  sealed trait State {
+    val name: String = getClass.getSimpleName.stripSuffix("$").toLowerCase
+  }
+  object State {
+    object Closed extends State
+    object Open extends State
+
+    val All: Seq[State] = Seq(Open, Closed)
+
+    implicit val formatState = new Format[State] {
+      def reads(json: JsValue): JsResult[State] = json match {
+        case JsString(s) => JsResult.fromTry(Try(All.find(_.name.equalsIgnoreCase(s)).get))
+        case _ => JsError(Seq(JsPath() -> Seq(JsonValidationError("validate.error.expected.issue.state"))))
+      }
+
+      def writes(o: State): JsValue = JsString(o.name)
+    }
+  }
+
+  implicit val readsIssue: Reads[Issue] = Json.reads[Issue]
 }
 
 

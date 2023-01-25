@@ -348,6 +348,15 @@ class GitHub(ghCredentials: GitHubCredentials) {
     executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
   }
 
+  def getUser(username: String)(implicit ec: EC): Future[GitHubResponse[User]] = {
+    val url = apiUrlBuilder
+      .addPathSegment("users")
+      .addPathSegment("username")
+      .build()
+
+    executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
+  }
+
   /**
     * https://developer.github.com/v3/orgs/teams/#add-or-update-team-repository
     * PUT /teams/:id/repos/:org/:repo

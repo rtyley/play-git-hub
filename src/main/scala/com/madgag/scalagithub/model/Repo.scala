@@ -103,6 +103,11 @@ case class Repo(
     override implicit val readsT: Reads[ContentCommit] = ContentCommit.readsContentCommit
   }
 
+  val contentsFile = new CanGet[Content, String] {
+    override val link: Link[String] = Link.fromSuffixedUrl(contents_url, "+path")
+    override implicit val readsT: Reads[Content] = ContentCommit.readsContent
+  }
+
   val labels = new CCreator[Label, String, CreateLabel](Link.fromSuffixedUrl(labels_url, "/name"))
     with CanGetAndList[Label, String]
   // https://developer.github.com/v3/issues/labels/#get-a-single-label

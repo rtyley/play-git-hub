@@ -14,7 +14,7 @@ libraryDependencies ++= Seq(
   "com.madgag" %% "scala-collection-plus" % "0.11",
   "com.madgag.scala-git" %% "scala-git" % "4.6",
   "com.madgag.scala-git" %% "scala-git-test" % "4.6" % Test,
-  "org.scalatest" %% "scalatest" % "3.2.14" % Test
+  "org.scalatest" %% "scalatest" % "3.2.15" % Test
 )
 
 resolvers ++= Resolver.sonatypeOssRepos("releases")
