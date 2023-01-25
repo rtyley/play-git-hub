@@ -60,18 +60,27 @@ case class ResponseMeta(quota: Quota, requestScopes: RequestScopes, links: Seq[L
 object ResponseMeta {
   val GitHubRateLimit: RateLimit = RateLimit(ofHours(1))
 
-  def rateLimitStatusFrom(headers: Headers): RateLimit.Status = GitHubRateLimit.statusFor(QuotaUpdate(
-    remaining = headers.get("X-RateLimit-Remaining").toInt,
-    limit = headers.get("X-RateLimit-Limit").toInt,
-    reset = Instant.ofEpochSecond(headers.get("X-RateLimit-Reset").toLong),
-    capturedAt = HttpDate.parse(headers.get("Date")).toInstant
+  implicit class RichHeaders(headers: Headers) {
+    def getOpt(name: String): Option[String] = Option(headers.get(name))
+  }
+
+  def rateLimitStatusFrom(headers: Headers): Option[RateLimit.Status] = for {
+    remaining <- headers.getOpt("X-RateLimit-Remaining")
+    limit <- headers.getOpt("X-RateLimit-Limit")
+    reset <- headers.getOpt("X-RateLimit-Reset")
+    date <- headers.getOpt("Date")
+  } yield GitHubRateLimit.statusFor(QuotaUpdate(
+    remaining = remaining.toInt,
+    limit = limit.toInt,
+    reset = Instant.ofEpochSecond(reset.toLong),
+    capturedAt = HttpDate.parse(date).toInstant
   ))
 
   def rateLimitFrom(response: Response): Quota = {
     val networkResponse = Option(response.networkResponse())
     Quota(
       consumed = if (networkResponse.exists(_.code != NOT_MODIFIED)) 1 else 0,
-      networkResponse.map(resp => rateLimitStatusFrom(resp.headers))
+      networkResponse.flatMap(resp => rateLimitStatusFrom(resp.headers))
     )
   }
 
@@ -127,7 +136,7 @@ object GitHub {
 class GitHub(ghCredentials: GitHubCredentials) {
   import GitHub._
 
-  def checkRateLimit()(implicit ec: EC): Future[RateLimit.Status] = {
+  def checkRateLimit()(implicit ec: EC): Future[Option[RateLimit.Status]] = {
     // GET /rate_limit  https://developer.github.com/v3/rate_limit/
     val url = apiUrlBuilder.addPathSegment("rate_limit").build()
 
