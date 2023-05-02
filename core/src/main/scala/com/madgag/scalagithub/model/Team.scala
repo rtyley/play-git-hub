@@ -16,7 +16,7 @@
 
 package com.madgag.scalagithub.model
 
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, Reads}
 
 
 case class Team(
@@ -24,11 +24,17 @@ case class Team(
   url: String,
   name: String,
   slug: String,
+  members_url: String,
   members_count: Int,
   organization: Team.Org
-) extends Deleteable // https://developer.github.com/v3/orgs/teams/#delete-team
+) extends Deletable // https://developer.github.com/v3/orgs/teams/#delete-team
 {
   val atSlug = "@" + slug
+
+  val members = new CanList[User, String] {
+    override val link: Link[String] = Link.fromSuffixedUrl(members_url, "/member")
+    override implicit val readsT: Reads[User] = User.readsUser
+  }
 }
 
 object Team {

@@ -16,22 +16,20 @@
 
 package com.madgag.scalagithub.model
 
+import java.time.ZonedDateTime
+
 import play.api.libs.json.Json
 
-/*
-{
-  "url": "https://api.github.com/repos/octocat/Hello-World/labels/bug",
-  "name": "bug",
-  "color": "f29513"
-}
- */
-case class Label(
+case class Comment(
+  id: Long,
   url: String,
-  name: String,
-  color: String
-) extends Deleteable // https://developer.github.com/v3/issues/labels/#delete-a-label
+  html_url: String,
+  body: String,
+  user: User,
+  created_at: ZonedDateTime,
+  updated_at: ZonedDateTime
+) extends Deletable // https://developer.github.com/v3/issues/comments/#delete-a-comment
 
-
-object Label {
-  implicit val readsLabel = Json.reads[Label]
+object Comment {
+  implicit val readsComment = Json.reads[Comment]
 }

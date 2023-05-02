@@ -15,6 +15,7 @@ dist
 /.project
 /RUNNING_PID
 /.settings
+.DS_Store
 # Created by http://www.gitignore.io
 
 ### Scala ###

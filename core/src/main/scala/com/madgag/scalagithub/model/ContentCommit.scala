@@ -80,6 +80,10 @@ case class Content(
   `type`: String
 )
 
+object Content {
+  implicit val readsContent = Json.reads[Content]
+}
+
 case class Commit(
   sha: ObjectId,
   url: String,
@@ -91,9 +95,6 @@ case class ContentCommit(content: Content, commit: Commit)
 
 
 object ContentCommit {
-
-  implicit val readsContent = Json.reads[Content]
-
   implicit val readsCommit = Json.reads[Commit]
 
   implicit val readsContentCommit = Json.reads[ContentCommit]

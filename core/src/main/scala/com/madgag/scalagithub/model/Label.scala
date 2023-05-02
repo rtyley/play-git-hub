@@ -16,15 +16,22 @@
 
 package com.madgag.scalagithub.model
 
-import com.madgag.scalagithub.GitHub
-import com.madgag.scalagithub.GitHub.FR
-import okhttp3.Request.Builder
+import play.api.libs.json.Json
 
-import scala.concurrent.{ExecutionContext => EC, Future}
+/*
+{
+  "url": "https://api.github.com/repos/octocat/Hello-World/labels/bug",
+  "name": "bug",
+  "color": "f29513"
+}
+ */
+case class Label(
+  url: String,
+  name: String,
+  color: String
+) extends Deletable // https://developer.github.com/v3/issues/labels/#delete-a-label
 
-trait Deleteable {
-  val url: String
 
-  def delete()(implicit g: GitHub, ec: EC): FR[Boolean] =
-    g.executeAndCheck(g.addAuth(new Builder().url(url).delete()).build())
+object Label {
+  implicit val readsLabel = Json.reads[Label]
 }

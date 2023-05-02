@@ -16,11 +16,19 @@
 
 package com.madgag.github
 
+import akka.NotUsed
+import akka.stream.Materializer
+import akka.stream.scaladsl.{Keep, Sink}
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
 import scala.util.{Success, Try}
 
 object Implicits {
+  implicit class RichSource[T](s: akka.stream.scaladsl.Source[Seq[T], NotUsed]) {
+    def all()(implicit mat: Materializer): Future[Seq[T]] = s.toMat(Sink.reduce[Seq[T]](_ ++ _))(Keep.right).run()
+  }
+
   implicit class RichFuture[S](f: Future[S]) {
     lazy val trying = {
       val p = Promise[Try[S]]()
