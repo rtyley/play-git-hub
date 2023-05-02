@@ -43,7 +43,7 @@ case class Hook(
   url: String,
   active: Boolean,
   config: Map[String, String]
-) extends Deleteable // https://developer.github.com/v3/repos/hooks/#delete-a-hook
+) extends Deletable // https://developer.github.com/v3/repos/hooks/#delete-a-hook
 
 object Hook {
   implicit val readsHook = Json.reads[Hook]

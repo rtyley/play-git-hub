@@ -1,37 +1,42 @@
-organization := "com.madgag"
-
-name := "play-git-hub"
+// name := "play-git-hub"
 
 description := "Group of library code for Play, Git, and GitHub"
 
-scalaVersion := "2.13.10"
+ThisBuild / scalaVersion := "2.13.10"
 
-libraryDependencies ++= Seq(
-  "com.madgag" %% "rate-limit-status" % "0.7",
-  "com.typesafe.play" %% "play" % "2.8.18",
-  "com.squareup.okhttp3" % "okhttp" % "3.14.9",
-  "com.lihaoyi" %% "fastparse" % "2.3.3",
-  "com.madgag" %% "scala-collection-plus" % "0.11",
-  "com.madgag.scala-git" %% "scala-git" % "4.6",
-  "com.madgag.scala-git" %% "scala-git-test" % "4.6" % Test,
-  "org.scalatest" %% "scalatest" % "3.2.15" % Test
+ThisBuild / organization := "com.madgag.play-git-hub"
+
+val scalaGitTest = "com.madgag.scala-git" %% "scala-git-test" % "4.6"
+
+lazy val core = (project in file("core")).settings(
+  libraryDependencies ++= Seq(
+    "com.madgag" %% "rate-limit-status" % "0.7",
+    "com.typesafe.play" %% "play" % "2.8.19",
+    "com.squareup.okhttp3" % "okhttp" % "3.14.9",
+    "com.lihaoyi" %% "fastparse" % "2.3.3",
+    "com.madgag" %% "scala-collection-plus" % "0.11",
+    "com.madgag.scala-git" %% "scala-git" % "4.6",
+    scalaGitTest % Test,
+    "org.scalatest" %% "scalatest" % "3.2.15" % Test
+  )
+)
+
+lazy val testkit = (project in file("testkit")).dependsOn(core).settings(
+  libraryDependencies ++= Seq(
+    "org.scalatest" %% "scalatest" % "3.2.15",
+    scalaGitTest
+  ),
+  libraryDependencySchemes += "org.scala-lang.modules" %% "scala-xml" % VersionScheme.Always
+)
+
+lazy val `play-secret-rotation-root` = (project in file(".")).aggregate(core, testkit).settings(
+  publishArtifact := false
 )
 
 resolvers ++= Resolver.sonatypeOssRepos("releases")
 
 Test / testOptions +=
   Tests.Argument(TestFrameworks.ScalaTest, "-u", s"test-results/scala-${scalaVersion.value}")
-
-updateOptions := updateOptions.value.withCachedResolution(true)
-
-scmInfo := Some(ScmInfo(
-  url("https://github.com/rtyley/play-git-hub"),
-  "scm:git:git@github.com:rtyley/play-git-hub.git"
-))
-
-licenses := Seq("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0"))
-
-publishTo := sonatypePublishToBundle.value
 
 import ReleaseTransformations._
 

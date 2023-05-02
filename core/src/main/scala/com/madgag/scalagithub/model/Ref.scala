@@ -38,7 +38,7 @@ case class Ref(
   ref: String,
   url: String,
   `object`: Ref.Object
-) extends Deleteable // https://developer.github.com/v3/git/refs/#delete-a-reference
+) extends Deletable // https://developer.github.com/v3/git/refs/#delete-a-reference
 {
   val objectId = `object`.sha
 }

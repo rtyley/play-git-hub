@@ -138,34 +138,22 @@ class GitHub(ghCredentials: GitHubCredentials) {
 
   def checkRateLimit()(implicit ec: EC): Future[Option[RateLimit.Status]] = {
     // GET /rate_limit  https://developer.github.com/v3/rate_limit/
-    val url = apiUrlBuilder.addPathSegment("rate_limit").build()
-
-    execute(addAuth(new Builder().url(url).get).build())(resp => ResponseMeta.rateLimitStatusFrom(resp.headers))
+    execute(addAuth(new Builder().url(path("rate_limit")).get).build()) {
+      resp => ResponseMeta.rateLimitStatusFrom(resp.headers)
+    }
   }
 
   /**
     * https://developer.github.com/v3/repos/#create
     */
-  def createRepo(repo: CreateRepo)(implicit ec: EC): FR[Repo] = {
-    val url = apiUrlBuilder
-      .addPathSegment("user")
-      .addPathSegment("repos")
-      .build()
-
-    executeAndReadJson(addAuth(new Builder().url(url).post(toJson(repo))).build)
-  }
+  def createRepo(repo: CreateRepo)(implicit ec: EC): FR[Repo] =
+    executeAndReadJson(addAuth(new Builder().url(path("user", "repos")).post(toJson(repo))).build)
 
   /**
     * https://developer.github.com/v3/repos/#create
     */
   def createOrgRepo(org: String, repo: CreateRepo)(implicit ec: EC): FR[Repo] = {
-    val url = apiUrlBuilder
-      .addPathSegment("orgs")
-      .addPathSegment(org)
-      .addPathSegment("repos")
-      .build()
-
-    executeAndReadJson(addAuth(new Builder().url(url).post(toJson(repo))).build)
+    executeAndReadJson(addAuth(new Builder().url(path("orgs", org, "repos")).post(toJson(repo))).build)
   }
 
   /**
@@ -173,13 +161,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
     */
   def getRepo(repoId: RepoId)(implicit ec: EC): FR[Repo] = {
     // GET /repos/:owner/:repo
-    val url = apiUrlBuilder
-      .addPathSegment("repos")
-      .addPathSegment(repoId.owner)
-      .addPathSegment(repoId.name)
-      .build()
-
-    executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
+    executeAndReadJson(addAuthAndCaching(new Builder().url(path("repos", repoId.owner, repoId.name))))
   }
 
   /**
@@ -187,12 +169,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
     */
   def getOrg(org: String)(implicit ec: EC): FR[Org] = {
     // GET /orgs/:org
-    val url = apiUrlBuilder
-      .addPathSegment("orgs")
-      .addPathSegment(org)
-      .build()
-
-    executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
+    executeAndReadJson(addAuthAndCaching(new Builder().url(path("orgs", org))))
   }
 
   /**
@@ -237,20 +214,12 @@ class GitHub(ghCredentials: GitHubCredentials) {
     */
   def listRepos(sort: String, direction: String)(implicit ec: EC): Source[Seq[Repo], NotUsed] = {
     // GET /user/repos
-    followAndEnumerate[Repo](apiUrlBuilder
-      .addPathSegment("user")
-      .addPathSegment("repos")
-      .build())
+    followAndEnumerate[Repo](path("user", "repos"))
   }
 
   def checkMembership(org: String, username: String)(implicit ec: EC): Future[Boolean] = {
     //GET /orgs/:org/members/:username
-    val url = apiUrlBuilder
-      .addPathSegment("orgs")
-      .addPathSegment(org)
-      .addPathSegment("members")
-      .addPathSegment(username)
-      .build()
+    val url = path("orgs", org, "members", username)
 
     execute(addAuthAndCaching(new Builder().url(url).get))(_.code == Status.NO_CONTENT)
   }
@@ -260,10 +229,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
     */
   def getUserTeams()(implicit ec: EC): FR[Seq[Team]] = {
     // GET /user/teams
-    val url = apiUrlBuilder
-      .addPathSegment("user")
-      .addPathSegment("teams")
-      .build()
+    val url = path("user", "teams")
 
     // TODO Pagination: https://developer.github.com/guides/traversing-with-pagination/
     executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
@@ -274,10 +240,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
     */
   def getUserEmails()(implicit ec: EC): FR[Seq[Email]] = {
     // GET /user/emails
-    val url = apiUrlBuilder
-      .addPathSegment("user")
-      .addPathSegment("emails")
-      .build()
+    val url = path("user", "emails")
 
     // TODO Pagination: https://developer.github.com/guides/traversing-with-pagination/
     executeAndReadJson[Seq[Email]](addAuthAndCaching(new Builder().url(url)))
@@ -288,13 +251,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
     */
   def listHooks(repo: RepoId)(implicit ec: EC): FR[Seq[Hook]] = {
     // GET /repos/:owner/:repo/hooks
-    val url = apiUrlBuilder
-      .addPathSegment("repos")
-      .addPathSegment(repo.owner)
-      .addPathSegment(repo.name)
-      .addPathSegment("hooks")
-      .build()
-
+    val url = path("repos", repo.owner, repo.name, "hooks")
     // TODO Pagination: https://developer.github.com/guides/traversing-with-pagination/
     executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
   }
@@ -312,36 +269,28 @@ class GitHub(ghCredentials: GitHubCredentials) {
     */
   def getTeam(teamId: Long)(implicit ec: EC): FR[Team] = {
     // GET /teams/:id
-    val url = apiUrlBuilder
-      .addPathSegment("teams")
-      .addPathSegment(teamId.toString)
-      .build()
+    executeAndReadJson(addAuthAndCaching(new Builder().url(path("teams", teamId.toString))))
+  }
 
-    executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
+  /**
+   * https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#get-a-team-by-name
+   */
+  def getTeamByName(org: String, team_slug: String)(implicit ec: EC): FR[Option[Team]] = {
+    // GET /orgs/{org}/teams/{team_slug}
+    executeAndReadOptionalJson(addAuthAndCaching(new Builder().url(path("orgs", org, "teams", team_slug))))
   }
 
   def getMembership(org: String, username: String)(implicit ec: EC): FR[Membership] = {
     // GET /orgs/:org/memberships/:username
-    val url = apiUrlBuilder
-      .addPathSegment("orgs")
-      .addPathSegment(org)
-      .addPathSegment("memberships")
-      .addPathSegment(username)
-      .build()
-
-    executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
+    executeAndReadJson(addAuthAndCaching(new Builder().url(path("orgs", org, "memberships", username))))
   }
 
   def getTeamMembership(teamId: Long, username: String)(implicit ec: EC): FR[Membership] = {
-    val url = apiUrlBuilder
-      .addPathSegment("teams")
-      .addPathSegment(teamId.toString)
-      .addPathSegment("memberships")
-      .addPathSegment(username)
-      .build()
-
+    val url = path("teams", teamId.toString, "memberships", username)
     executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
   }
+
+
 
   def addAuthAndCaching(builder: Builder): Request =
     addAuth(builder).cacheControl(AlwaysHitNetwork).build()
@@ -349,12 +298,18 @@ class GitHub(ghCredentials: GitHubCredentials) {
   def addAuth(builder: Builder) = builder
     .addHeader("Authorization", s"token ${ghCredentials.accessKey}")
 
-  def getUser()(implicit ec: EC): Future[GitHubResponse[User]] = {
-    val url = apiUrlBuilder
-      .addPathSegment("user")
-      .build()
+  def getUser()(implicit ec: EC): Future[GitHubResponse[User]] =
+    executeAndReadJson(addAuthAndCaching(new Builder().url(path("user"))))
 
-    executeAndReadJson(addAuthAndCaching(new Builder().url(url)))
+  /**
+   * https://docs.github.com/en/rest/users/users?apiVersion=2022-11-28#get-a-user
+   */
+  def getUser(username: String)(implicit ec: EC): Future[GitHubResponse[User]] = {
+    executeAndReadJson(addAuthAndCaching(new Builder().url(path("users", username))))
+  }
+
+  def listTeamMembers(org: String, teamSlug: String)(implicit ec: EC): Source[Seq[User],NotUsed] = {
+    followAndEnumerate[User](path("orgs", org, "teams", teamSlug, "members"))
   }
 
   /**
@@ -362,15 +317,19 @@ class GitHub(ghCredentials: GitHubCredentials) {
     * PUT /teams/:id/repos/:org/:repo
     */
   def addTeamRepo(teamId: Long, org: String, repoName: String)(implicit ec: EC) = {
-    val url = apiUrlBuilder
-      .addPathSegment("teams")
-      .addPathSegment(teamId.toString)
-      .addPathSegment("repos")
-      .addPathSegment(org)
-      .addPathSegment(repoName)
-      .build()
+    val url = path("teams", teamId.toString, "repos", org, repoName)
 
     executeAndCheck(addAuthAndCaching(new Builder().url(url).put(Json.obj("permission" -> "admin"))))
+  }
+
+  /**
+   * https://docs.github.com/en/rest/teams/members?apiVersion=2022-11-28#add-or-update-team-membership-for-a-user
+   */
+  def addOrUpdateTeamMembershipForAUser(org: String, team_slug: String, username: String, role: String)(implicit ec: EC) = {
+    // PUT /orgs/{org}/teams/{team_slug}/memberships/{username}
+    val url = path("orgs", org, "teams", team_slug, "memberships", username)
+
+    executeAndCheck(addAuthAndCaching(new Builder().url(url).put(Json.obj("role" -> role))))
   }
 
   /*
@@ -397,11 +356,15 @@ class GitHub(ghCredentials: GitHubCredentials) {
     GitHubResponse(logAndGetMeta(request, response), allGood)
   }
 
-  def executeAndReadJson[T](request: Request)(implicit ev: Reads[T], ec: EC): FR[T] = execute(request) {
-    response =>
+  def executeAndReadJson[T](request: Request)(implicit ev: Reads[T], ec: EC): FR[T] = executeAndWrap(request) {
+    response => readAndResolve[T](request, response)
+  }
 
-      val meta = logAndGetMeta(request, response)
+  def executeAndReadOptionalJson[T](request: Request)(implicit ev: Reads[T], ec: EC): FR[Option[T]] = executeAndWrap(request) {
+    response => Option.when(response.code() != 404)(readAndResolve[T](request, response))
+  }
 
+  private def readAndResolve[T](request: Request, response: Response)(implicit ev: Reads[T]): T = {
     val responseBody = response.body()
 
     val json = Json.parse(responseBody.byteStream())
@@ -409,11 +372,14 @@ class GitHub(ghCredentials: GitHubCredentials) {
     json.validate[T] match {
       case error: JsError =>
         val message = s"Error decoding ${request.method} ${request.url} : $error"
-        logger.warn(s"$message\n\n$json\n\n" )
+        logger.warn(s"$message\n\n$json\n\n")
         throw new RuntimeException(message)
-      case JsSuccess(result, _) =>
-        GitHubResponse(meta, result)
+      case JsSuccess(result, _) => result
     }
+  }
+
+  def executeAndWrap[T](request: Request)(processor: Response => T)(implicit ec: EC): FR[T] = execute(request) {
+    response => GitHubResponse(logAndGetMeta(request, response), processor(response))
   }
 
   def execute[T](request: Request)(processor: Response => T)(implicit ec: EC): Future[T] =
@@ -421,4 +387,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
 
   def apiUrlBuilder: HttpUrl.Builder = new HttpUrl.Builder().scheme("https").host("api.github.com")
 
+  def path(segments: String*): HttpUrl = segments.foldLeft(apiUrlBuilder) { case (builder, segment) =>
+    builder.addPathSegment(segment)
+  }.build()
 }

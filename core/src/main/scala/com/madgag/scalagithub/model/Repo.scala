@@ -65,7 +65,7 @@ case class Repo(
   created_at: ZonedDateTime,
   updated_at: ZonedDateTime,
   permissions: Option[Permissions]
-) extends Deleteable // https://developer.github.com/v3/repos/#delete-a-repository
+) extends Deletable // https://developer.github.com/v3/repos/#delete-a-repository
 {
   val repoId = RepoId.from(full_name)
 
@@ -86,8 +86,16 @@ case class Repo(
   // https://developer.github.com/v3/pulls/#create-a-pull-request
   // https://developer.github.com/v3/pulls/#get-a-single-pull-request
 
-  val issues = new CCreator[Issue, Int, CreateIssue](Link.fromSuffixedUrl(issues_url, "/number"))
+  val issues = new CCreator[Issue, Int, CreateOrUpdateIssue](Link.fromSuffixedUrl(issues_url, "/number"))
     with CanGetAndList[Issue, Int]
+
+  def createIssue(
+    title: String,
+    body: String,
+    labels: Option[Seq[String]] = None,
+    assignee: Option[String] = None
+  )(implicit g: GitHub, ec: EC): FR[Issue] =
+    issues.create(CreateOrUpdateIssue(Some(title), Some(body), labels = labels, assignees = assignee.map(Seq(_))))
 
   val teams = new CanList[Repo.Team, Int] {
     override val link: Link[Int] = Link.fromListUrl(teams_url)
@@ -101,6 +109,12 @@ case class Repo(
     override val link: Link[String] = Link.fromSuffixedUrl(contents_url, "+path")
     override implicit val writesCC: Writes[CreateFile] = CreateFile.writesCreateFile
     override implicit val readsT: Reads[ContentCommit] = ContentCommit.readsContentCommit
+  }
+
+  // https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28#get-repository-content
+  val contentsFile = new CanGet[Content, String] {
+    override val link: Link[String] = Link.fromSuffixedUrl(contents_url, "+path")
+    override implicit val readsT: Reads[Content] = Content.readsContent
   }
 
   val labels = new CCreator[Label, String, CreateLabel](Link.fromSuffixedUrl(labels_url, "/name"))
@@ -192,6 +206,15 @@ trait CanCheck[ID] {
   }
 }
 
+trait CanDelete[ID] {
+
+  val link: Link[ID]
+
+  def delete(id: ID)(implicit g: GitHub, ec: EC): FR[Boolean] = {
+    g.executeAndCheck(g.addAuthAndCaching(new Builder().url(link.urlFor(id)).delete()))
+  }
+}
+
 trait CanReplace[T, ID] extends Reader[T] {
 
   val link: Link[ID]
@@ -257,7 +280,7 @@ object Repo {
     description: String,
     privacy: String,
     permission: String
-  ) extends Deleteable // https://developer.github.com/v3/orgs/teams/#delete-team
+  ) extends Deletable // https://developer.github.com/v3/orgs/teams/#delete-team
   {
     val atSlug = "@" + slug
   }

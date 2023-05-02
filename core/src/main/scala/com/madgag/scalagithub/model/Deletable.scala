@@ -16,20 +16,15 @@
 
 package com.madgag.scalagithub.model
 
-import java.time.ZonedDateTime
+import com.madgag.scalagithub.GitHub
+import com.madgag.scalagithub.GitHub.FR
+import okhttp3.Request.Builder
 
-import play.api.libs.json.Json
+import scala.concurrent.{ExecutionContext => EC, Future}
 
-case class Comment(
-  id: Long,
-  url: String,
-  html_url: String,
-  body: String,
-  user: User,
-  created_at: ZonedDateTime,
-  updated_at: ZonedDateTime
-) extends Deleteable // https://developer.github.com/v3/issues/comments/#delete-a-comment
+trait Deletable {
+  val url: String
 
-object Comment {
-  implicit val readsComment = Json.reads[Comment]
+  def delete()(implicit g: GitHub, ec: EC): FR[Boolean] =
+    g.executeAndCheck(g.addAuth(new Builder().url(url).delete()).build())
 }

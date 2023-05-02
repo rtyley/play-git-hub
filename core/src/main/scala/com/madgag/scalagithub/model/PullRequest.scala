@@ -19,7 +19,7 @@ package com.madgag.scalagithub.model
 import com.madgag.git._
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.{FR, _}
-import com.madgag.scalagithub.commands.{CreateComment, MergePullRequest}
+import com.madgag.scalagithub.commands.{CreateComment, CreateOrUpdateIssue, MergePullRequest}
 import com.madgag.scalagithub.model.Link.fromListUrl
 import com.madgag.scalagithub.model.PullRequest.CommitOverview
 import okhttp3.Request.Builder
@@ -30,6 +30,7 @@ import play.api.libs.json.{Json, Reads}
 
 import java.time.ZonedDateTime
 import scala.concurrent.{ExecutionContext => EC}
+import Issue._
 import com.madgag.scalagithub._
 
 case class CommitPointer(
@@ -52,6 +53,8 @@ trait Commentable {
     with CanGetAndList[Comment, Long]
   // https://developer.github.com/v3/issues/comments/#get-a-single-comment
   // https://developer.github.com/v3/issues/comments/#create-a-comment
+
+  def createComment(text: String)(implicit g: GitHub, ec: EC): FR[Comment] = comments2.create(CreateComment(text))
 }
 
 trait HasLabels {
@@ -95,10 +98,20 @@ case class Issue(
   created_at: Option[ZonedDateTime] = None,
   comments_url: String,
   comments: Option[Int]
-) extends Commentable with HasLabels
+) extends Commentable with HasLabels {
+  val members = new CanList[User, String] with CanCheck[String] {
+    override val link: Link[String] = Link.fromListUrl(s"$url/members")
+    override implicit val readsT: Reads[User] = User.readsUser
+  }
+
+  def update(update: CreateOrUpdateIssue)(implicit g: GitHub, ec: EC): FR[Issue] =
+    g.executeAndReadJson[Issue](g.addAuth(new Builder().url(url).post(toJson(update))).build)
+
+  def close()(implicit g: GitHub, ec: EC): FR[Issue] = update(CreateOrUpdateIssue(state = Some("closed")))
+}
 
 object Issue {
-  implicit val readsIssue = Json.reads[Issue]
+  implicit val readsIssue: Reads[Issue] = Json.reads[Issue]
 }
 
 

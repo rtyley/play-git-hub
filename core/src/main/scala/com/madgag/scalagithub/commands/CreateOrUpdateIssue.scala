@@ -18,11 +18,17 @@ package com.madgag.scalagithub.commands
 
 import play.api.libs.json.Json
 
-case class CreateIssue(
-  title: String,
-  body: Option[String] = None
+/**
+ * https://docs.github.com/en/rest/issues/issues?apiVersion=2022-11-28#create-an-issue
+ */
+case class CreateOrUpdateIssue(
+  title: Option[String] = None, // Required for Create
+  body: Option[String] = None,
+  state: Option[String] = None, // Not allowed for Create
+  labels: Option[Seq[String]] = None,
+  assignees: Option[Seq[String]] = None
 )
 
-object CreateIssue {
-  implicit val writesCreateIssue = Json.writes[CreateIssue]
+object CreateOrUpdateIssue {
+  implicit val writesCreateIssue = Json.writes[CreateOrUpdateIssue]
 }

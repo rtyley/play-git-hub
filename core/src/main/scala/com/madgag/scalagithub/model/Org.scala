@@ -66,19 +66,19 @@ case class Org(
 ) extends Account {
   lazy val membersAdminUrl = s"https://github.com/orgs/$login/members"
 
-  // GET /orgs/:org/members
-  // GET /orgs/:org/members/:username
-  val members = new CanList[User, String] with CanCheck[String] {
-    override val link: Link[String] = Link.fromListUrl(s"$url/members")
+  private def userField(suffix: String) =
+    new CanList[User, String] with CanCheck[String] with CanDelete[String] {
+    override val link: Link[String] = Link.fromListUrl(s"$url/$suffix")
     override implicit val readsT: Reads[User] = User.readsUser
   }
 
+  // GET /orgs/:org/members
+  // GET /orgs/:org/members/:username
+  val members = userField("members")
+
   // GET /orgs/:org/public_members
   // GET /orgs/:org/public_members/:username
-  val publicMembers = new CanList[User, String] with CanCheck[String] {
-    override val link: Link[String] = Link.fromListUrl(s"$url/public_members")
-    override implicit val readsT: Reads[User] = User.readsUser
-  }
+  val publicMembers = userField("public_members")
 }
 
 object Org {
