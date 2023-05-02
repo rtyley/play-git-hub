@@ -217,6 +217,14 @@ class GitHub(ghCredentials: GitHubCredentials) {
     followAndEnumerate[Repo](path("user", "repos"))
   }
 
+  /**
+   * https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-organization-repositories
+   */
+  def listOrgRepos(org: String, sort: String, direction: String)(implicit ec: EC): Source[Seq[Repo], NotUsed] = {
+    // GET orgs/{org}/repos
+    followAndEnumerate[Repo](path("orgs", org, "repos"))
+  }
+
   def checkMembership(org: String, username: String)(implicit ec: EC): Future[Boolean] = {
     //GET /orgs/:org/members/:username
     val url = path("orgs", org, "members", username)
