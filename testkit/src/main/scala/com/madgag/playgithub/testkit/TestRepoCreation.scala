@@ -27,8 +27,7 @@ import com.madgag.time.Implicits._
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.scalatest.Inspectors.forAll
-import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.ScalaFutures._
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.matchers.should.Matchers._
 
 import java.nio.file.Files.createTempDirectory
@@ -36,11 +35,13 @@ import java.time.Duration.ofMinutes
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
-case class TestRepoCreation(testRepoNamePrefix: String, githubCredentials: GitHubCredentials)(implicit
-  github: GitHub,
-  m: Materializer,
-  patienceConfig: PatienceConfig
-) {
+trait TestRepoCreation extends Eventually with ScalaFutures {
+
+  val testRepoNamePrefix: String
+  val githubCredentials: GitHubCredentials
+  implicit val github: GitHub
+  implicit val materializer: Materializer
+
   def isRecentTestRepo(repo: Repo): Boolean =
     repo.name.startsWith(testRepoNamePrefix) && repo.created_at.toInstant.age() > ofMinutes(30)
 
