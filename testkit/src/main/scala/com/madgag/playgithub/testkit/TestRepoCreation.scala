@@ -38,7 +38,8 @@ import scala.jdk.CollectionConverters._
 
 case class TestRepoCreation(testRepoNamePrefix: String, githubCredentials: GitHubCredentials)(implicit
   github: GitHub,
-  m: Materializer
+  m: Materializer,
+  patienceConfig: PatienceConfig
 ) {
   def isRecentTestRepo(repo: Repo): Boolean =
     repo.name.startsWith(testRepoNamePrefix) && repo.created_at.toInstant.age() > ofMinutes(30)
