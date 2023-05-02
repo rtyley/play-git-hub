@@ -9,7 +9,7 @@ scmInfo := Some(ScmInfo(
 
 licenses := Seq("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0"))
 
-publishTo := sonatypePublishToBundle.value
+ThisBuild / publishTo := sonatypePublishToBundle.value
 
 ThisBuild / pomExtra := (
   <url>https://github.com/rtyley/scala-git</url>
