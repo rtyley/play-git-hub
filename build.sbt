@@ -33,7 +33,7 @@ lazy val testkit = (project in file("testkit")).dependsOn(core).settings(
   libraryDependencySchemes += "org.scala-lang.modules" %% "scala-xml" % VersionScheme.Always
 )
 
-lazy val `play-secret-rotation-root` = (project in file(".")).aggregate(core, testkit).settings(
+lazy val `play-git-hub-root` = (project in file(".")).aggregate(core, testkit).settings(
   publishArtifact := false
 )
 
