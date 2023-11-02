@@ -2,28 +2,32 @@
 
 description := "Group of library code for Play, Git, and GitHub"
 
-ThisBuild / scalaVersion := "2.13.10"
+ThisBuild / scalaVersion := "2.13.12"
 
 ThisBuild / organization := "com.madgag.play-git-hub"
 
-val scalaGitTest = "com.madgag.scala-git" %% "scala-git-test" % "4.6"
+val scalaGitVersion = "4.8"
+val scalaGitTest = "com.madgag.scala-git" %% "scala-git-test" % scalaGitVersion
+
+val scalaTest = "org.scalatest" %% "scalatest" % "3.2.15"
 
 lazy val core = (project in file("core")).settings(
+  resolvers ++= Resolver.sonatypeOssRepos("releases"),
   libraryDependencies ++= Seq(
     "com.madgag" %% "rate-limit-status" % "0.7",
     "com.typesafe.play" %% "play" % "2.8.19",
     "com.squareup.okhttp3" % "okhttp" % "3.14.9",
-    "com.lihaoyi" %% "fastparse" % "2.3.3",
+    "com.lihaoyi" %% "fastparse" % "3.0.0",
     "com.madgag" %% "scala-collection-plus" % "0.11",
-    "com.madgag.scala-git" %% "scala-git" % "4.6",
+    "com.madgag.scala-git" %% "scala-git" % scalaGitVersion,
     scalaGitTest % Test,
-    "org.scalatest" %% "scalatest" % "3.2.15" % Test
+    scalaTest % Test
   )
 )
 
 lazy val testkit = (project in file("testkit")).dependsOn(core).settings(
   libraryDependencies ++= Seq(
-    "org.scalatest" %% "scalatest" % "3.2.15",
+    scalaTest,
     scalaGitTest
   ),
   libraryDependencySchemes += "org.scala-lang.modules" %% "scala-xml" % VersionScheme.Always
