@@ -20,7 +20,7 @@ import akka.NotUsed
 import akka.stream.scaladsl.Source
 
 import java.time.Duration.ofHours
-import java.time.Instant
+import java.time.{Instant, ZonedDateTime}
 import java.util.concurrent.TimeUnit.SECONDS
 import com.madgag.okhttpscala._
 import com.madgag.ratelimitstatus.{QuotaUpdate, RateLimit}
@@ -29,7 +29,6 @@ import com.madgag.scalagithub.commands._
 import com.madgag.scalagithub.model._
 import okhttp3.Request.Builder
 import okhttp3._
-import okhttp3.internal.http.HttpDate
 import play.api.Logger
 import play.api.http.Status
 import play.api.http.Status._
@@ -39,7 +38,10 @@ import play.api.libs.json._
 import scala.jdk.CollectionConverters._
 import scala.concurrent.{Future, ExecutionContext => EC}
 import scala.language.implicitConversions
-import fastparse._, NoWhitespace._
+import fastparse._
+import NoWhitespace._
+
+import java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME
 
 case class Quota(
   consumed: Int,
@@ -73,7 +75,7 @@ object ResponseMeta {
     remaining = remaining.toInt,
     limit = limit.toInt,
     reset = Instant.ofEpochSecond(reset.toLong),
-    capturedAt = HttpDate.parse(date).toInstant
+    capturedAt = ZonedDateTime.parse(date, RFC_1123_DATE_TIME).toInstant
   ))
 
   def rateLimitFrom(response: Response): Quota = {
