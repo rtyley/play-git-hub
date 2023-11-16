@@ -20,7 +20,6 @@ lazy val core = (project in file("core")).settings(
     "com.lihaoyi" %% "fastparse" % "3.0.0",
     "com.madgag" %% "scala-collection-plus" % "0.11",
     "com.madgag.scala-git" %% "scala-git" % scalaGitVersion,
-    "joda-time" % "joda-time" % "2.12.5",
     scalaGitTest % Test,
     scalaTest % Test
   )
