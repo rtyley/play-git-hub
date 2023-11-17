@@ -16,7 +16,7 @@
 
 package com.madgag.playgithub.testkit
 
-import akka.stream.Materializer
+import org.apache.pekko.stream.Materializer
 import com.madgag.git.RichRepo
 import com.madgag.git.test.unpackRepo
 import com.madgag.github.Implicits._

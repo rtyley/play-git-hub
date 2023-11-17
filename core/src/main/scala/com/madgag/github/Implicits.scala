@@ -16,16 +16,16 @@
 
 package com.madgag.github
 
-import akka.NotUsed
-import akka.stream.Materializer
-import akka.stream.scaladsl.{Keep, Sink}
+import org.apache.pekko.NotUsed
+import org.apache.pekko.stream.Materializer
+import org.apache.pekko.stream.scaladsl.{Keep, Sink}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
 import scala.util.{Success, Try}
 
 object Implicits {
-  implicit class RichSource[T](s: akka.stream.scaladsl.Source[Seq[T], NotUsed]) {
+  implicit class RichSource[T](s: org.apache.pekko.stream.scaladsl.Source[Seq[T], NotUsed]) {
     def all()(implicit mat: Materializer): Future[Seq[T]] = s.toMat(Sink.reduce[Seq[T]](_ ++ _))(Keep.right).run()
   }
 

@@ -16,8 +16,8 @@
 
 package com.madgag.scalagithub.model
 
-import akka.NotUsed
-import akka.stream.scaladsl.Source
+import org.apache.pekko.NotUsed
+import org.apache.pekko.stream.scaladsl.Source
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.commands._

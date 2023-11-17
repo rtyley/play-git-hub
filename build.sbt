@@ -15,11 +15,12 @@ lazy val core = (project in file("core")).settings(
   resolvers ++= Resolver.sonatypeOssRepos("releases"),
   libraryDependencies ++= Seq(
     "com.madgag" %% "rate-limit-status" % "0.7",
-    "com.typesafe.play" %% "play" % "2.8.19",
-    "com.squareup.okhttp3" % "okhttp" % "4.10.0",
+    "org.playframework" %% "play" % "3.0.0",
+    "com.squareup.okhttp3" % "okhttp" % "4.12.0",
     "com.lihaoyi" %% "fastparse" % "3.0.0",
     "com.madgag" %% "scala-collection-plus" % "0.11",
     "com.madgag.scala-git" %% "scala-git" % scalaGitVersion,
+    "joda-time" % "joda-time" % "2.12.5",
     scalaGitTest % Test,
     scalaTest % Test
   )
