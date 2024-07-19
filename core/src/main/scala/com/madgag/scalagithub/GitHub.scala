@@ -87,8 +87,8 @@ object ResponseMeta {
   }
 
   def requestScopesFrom(response: Response) = RequestScopes(
-    response.header("X-OAuth-Scopes").split(',').map(_.trim).toSet,
-    response.header("X-Accepted-OAuth-Scopes").split(',').map(_.trim).toSet
+    Option(response.header("X-OAuth-Scopes")).map(v => v.split(',').map(_.trim).toSet).getOrElse(Set.empty),
+    Option(response.header("X-Accepted-OAuth-Scopes")).map(v => v.split(',').map(_.trim).toSet).getOrElse(Set.empty)
   )
 
   def linksFrom(response: Response): Seq[LinkTarget] = for {
