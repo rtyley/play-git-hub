@@ -55,7 +55,7 @@ case class RequestScopes(
   acceptedScopes: Set[String]
 )
 
-case class ResponseMeta(quota: Quota, requestScopes: RequestScopes, links: Seq[LinkTarget]) {
+case class ResponseMeta(quota: Quota, requestScopes: Option[RequestScopes], links: Seq[LinkTarget]) {
   val nextOpt: Option[HttpUrl] = links.find(_.relOpt.contains("next")).map(_.url)
 }
 
@@ -86,10 +86,13 @@ object ResponseMeta {
     )
   }
 
-  def requestScopesFrom(response: Response) = RequestScopes(
-    response.header("X-OAuth-Scopes").split(',').map(_.trim).toSet,
-    response.header("X-Accepted-OAuth-Scopes").split(',').map(_.trim).toSet
-  )
+  def requestScopesFrom(response: Response): Option[RequestScopes] = {
+    def scopes(h: String): Option[Set[String]] = Option(response.header(h)).map(_.split(',').map(_.trim).toSet)
+    for {
+      oAuthScopes <- scopes("X-OAuth-Scopes")
+      acceptedOAuthScopes <- scopes("X-Accepted-OAuth-Scopes")
+    } yield RequestScopes(oAuthScopes, acceptedOAuthScopes)
+  }
 
   def linksFrom(response: Response): Seq[LinkTarget] = for {
     linkHeader <- response.headers("Link").asScala.toSeq
