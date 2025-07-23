@@ -18,15 +18,14 @@ lazy val artifactProducingSettings = Seq(
 )
 
 lazy val core = (project in file("core")).settings(artifactProducingSettings).settings(
-  resolvers ++= Resolver.sonatypeOssRepos("releases"),
   libraryDependencies ++= Seq(
-    "com.madgag" %% "rate-limit-status" % "0.7",
-    "org.playframework" %% "play" % "3.0.6",
+    "com.madgag" %% "rate-limit-status" % "1.0.1",
+    "org.playframework" %% "play" % "3.0.8",
     "com.squareup.okhttp3" % "okhttp" % "4.12.0",
     "com.lihaoyi" %% "fastparse" % "3.1.1",
     "com.madgag" %% "scala-collection-plus" % "1.0.0",
     "com.madgag.scala-git" %% "scala-git" % scalaGitVersion,
-    "joda-time" % "joda-time" % "2.13.0",
+    "joda-time" % "joda-time" % "2.14.0",
     scalaTest % Test,
     scalaGitTest % Test
   )
@@ -43,9 +42,8 @@ lazy val `play-git-hub-root` = (project in file(".")).aggregate(core, testkit).s
   publishArtifact := false
 )
 
-resolvers ++= Resolver.sonatypeOssRepos("releases")
 publish / skip := true
-releaseVersion := ReleaseVersion.fromAggregatedAssessedCompatibilityWithLatestRelease().value
+// releaseVersion := ReleaseVersion.fromAggregatedAssessedCompatibilityWithLatestRelease().value
 releaseProcess := Seq[ReleaseStep](
   checkSnapshotDependencies,
   inquireVersions,
