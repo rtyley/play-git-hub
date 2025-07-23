@@ -60,5 +60,5 @@ case class GitHubCredentials(
   accessKey: String,
   okHttpClient: OkHttpClient
 ) {
-  lazy val git: CredentialsProvider = new UsernamePasswordCredentialsProvider(accessKey, "")
+  lazy val git: CredentialsProvider = new UsernamePasswordCredentialsProvider("x-access-token", accessKey)
 }
