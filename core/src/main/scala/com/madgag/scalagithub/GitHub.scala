@@ -314,6 +314,9 @@ class GitHub(ghCredentials: GitHubCredentials) {
   def getUser()(implicit ec: EC): Future[GitHubResponse[User]] =
     executeAndReadJson(addAuthAndCaching(new Builder().url(path("user"))))
 
+  def getAuthenticatedApp()(implicit ec: EC): Future[GitHubResponse[GitHubApp]] =
+    executeAndReadJson(addAuthAndCaching(new Builder().url(path("app"))))
+
   /**
    * https://docs.github.com/en/rest/users/users?apiVersion=2022-11-28#get-a-user
    */
