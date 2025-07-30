@@ -20,6 +20,8 @@ lazy val artifactProducingSettings = Seq(
 lazy val core = (project in file("core")).settings(artifactProducingSettings).settings(
   libraryDependencies ++= Seq(
     "com.madgag" %% "rate-limit-status" % "1.0.1",
+    "com.github.blemale" %% "scaffeine" % "5.3.0",
+    "org.bouncycastle" % "bcpkix-jdk15on" % "1.70",
     "org.playframework" %% "play" % "3.0.8",
     "com.squareup.okhttp3" % "okhttp" % "4.12.0",
     "com.lihaoyi" %% "fastparse" % "3.1.1",
@@ -43,7 +45,7 @@ lazy val `play-git-hub-root` = (project in file(".")).aggregate(core, testkit).s
 )
 
 publish / skip := true
-// releaseVersion := ReleaseVersion.fromAggregatedAssessedCompatibilityWithLatestRelease().value
+releaseVersion := ReleaseVersion.fromAggregatedAssessedCompatibilityWithLatestRelease().value
 releaseProcess := Seq[ReleaseStep](
   checkSnapshotDependencies,
   inquireVersions,

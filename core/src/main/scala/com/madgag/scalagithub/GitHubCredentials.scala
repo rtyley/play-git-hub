@@ -16,49 +16,36 @@
 
 package com.madgag.scalagithub
 
-import java.nio.file.{Files, Path}
-import okhttp3.OkHttpClient
-import org.eclipse.jgit.transport.{CredentialsProvider, UsernamePasswordCredentialsProvider}
-import play.api.{Logger, Logging}
+import com.madgag.github.AccessToken
+import com.madgag.scalagithub.BearerAuthTransportConfig.bearerAuth
+import org.eclipse.jgit.api.{TransportCommand, TransportConfigCallback}
+import org.eclipse.jgit.transport.{CredentialsProvider, TransportHttp, UsernamePasswordCredentialsProvider}
 
-import scala.util.Try
+import java.nio.charset.StandardCharsets
+import java.util.Base64
+import scala.jdk.CollectionConverters._
 
-/*
-Stuff you might want to know:
+case class GitHubCredentials(accessToken: AccessToken) {
+  lazy val git: CredentialsProvider = new UsernamePasswordCredentialsProvider("x-access-token", accessToken.value)
 
-* Working Dir
-* AccessToken
-* User - whoami
-* The API url - "https://api.github.com" and also the OAuth url, eg: https://github.com/login/oauth/authorize
- */
-
-object GitHubCredentials extends Logging {
-
-  def forAccessKey(accessKey: String, workingDir: Path): Try[GitHubCredentials] = Try {
-
-    val userDir = workingDir.resolve(s"key-${accessKey.take(16)}").toAbsolutePath
-
-    assert(userDir.startsWith(workingDir))
-
-    userDir.toFile.mkdirs()
-
-    val okHttpClient = {
-      val clientBuilder = new OkHttpClient.Builder()
-
-      if (Files.exists(userDir)) {
-        clientBuilder.cache(new okhttp3.Cache(userDir.toFile, 5 * 1024 * 1024))
-      } else logger.warn(s"Couldn't create HttpResponseCache dir $userDir")
-
-      clientBuilder.build()
-    }
-
-    GitHubCredentials(accessKey, okHttpClient)
-  }
+  /**
+   * Is this necessary or not?!
+   *
+   * The tests passing on https://github.com/guardian/prout/pull/141 - where I seem to have lost any indication that
+   * we're calling `setTransportConfigCallback` indicates that we **don't** need it.
+   *
+   * Yet my experience with `gha-micropython-logic-capture-workflow` seems to indicate that it is necessary...
+   * https://github.com/rtyley/gha-micropython-logic-capture-workflow/blob/2bf20e9671410d9b08bd86daf02799ac4e1f669c/worker/src/main/scala/com/madgag/micropython/logiccapture/worker/LogicCaptureWorker.scala#L29
+   *
+   * See also https://github.com/eclipse-jgit/jgit/issues/94
+   */
+  def applyAuthTo[C <: TransportCommand[C, T], T](transportCommand: C): C =
+    transportCommand.setCredentialsProvider(git).setTransportConfigCallback(bearerAuth(accessToken.value))
 }
 
-case class GitHubCredentials(
-  accessKey: String,
-  okHttpClient: OkHttpClient
-) {
-  lazy val git: CredentialsProvider = new UsernamePasswordCredentialsProvider("x-access-token", accessKey)
+object BearerAuthTransportConfig {
+  def bearerAuth(token: String): TransportConfigCallback = {
+    case http: TransportHttp =>
+      http.setAdditionalHeaders(Map("Authorization" -> s"Bearer ${Base64.getEncoder.encodeToString(token.getBytes(StandardCharsets.UTF_8))}").asJava)
+  }
 }

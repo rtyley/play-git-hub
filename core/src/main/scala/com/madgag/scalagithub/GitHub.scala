@@ -16,32 +16,23 @@
 
 package com.madgag.scalagithub
 
-import org.apache.pekko.NotUsed
-import org.apache.pekko.stream.scaladsl.Source
-
-import java.time.Duration.ofHours
-import java.time.{Instant, ZonedDateTime}
-import java.util.concurrent.TimeUnit.SECONDS
 import com.madgag.okhttpscala._
-import com.madgag.ratelimitstatus.{QuotaUpdate, RateLimit}
-import com.madgag.rfc5988link.{LinkParser, LinkTarget}
+import com.madgag.ratelimitstatus.RateLimit
 import com.madgag.scalagithub.commands._
 import com.madgag.scalagithub.model._
 import okhttp3.Request.Builder
 import okhttp3._
+import org.apache.pekko.NotUsed
+import org.apache.pekko.stream.scaladsl.Source
 import play.api.Logger
 import play.api.http.Status
-import play.api.http.Status._
 import play.api.libs.json.Json.toJson
 import play.api.libs.json._
 
-import scala.jdk.CollectionConverters._
+import java.nio.file.Files
+import java.util.concurrent.TimeUnit.SECONDS
 import scala.concurrent.{Future, ExecutionContext => EC}
 import scala.language.implicitConversions
-import fastparse._
-import NoWhitespace._
-
-import java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME
 
 case class Quota(
   consumed: Int,
@@ -54,54 +45,6 @@ case class RequestScopes(
   authedScopes: Set[String],
   acceptedScopes: Set[String]
 )
-
-case class ResponseMeta(quota: Quota, requestScopes: Option[RequestScopes], links: Seq[LinkTarget]) {
-  val nextOpt: Option[HttpUrl] = links.find(_.relOpt.contains("next")).map(_.url)
-}
-
-object ResponseMeta {
-  val GitHubRateLimit: RateLimit = RateLimit(ofHours(1))
-
-  implicit class RichHeaders(headers: Headers) {
-    def getOpt(name: String): Option[String] = Option(headers.get(name))
-  }
-
-  def rateLimitStatusFrom(headers: Headers): Option[RateLimit.Status] = for {
-    remaining <- headers.getOpt("X-RateLimit-Remaining")
-    limit <- headers.getOpt("X-RateLimit-Limit")
-    reset <- headers.getOpt("X-RateLimit-Reset")
-    date <- headers.getOpt("Date")
-  } yield GitHubRateLimit.statusFor(QuotaUpdate(
-    remaining = remaining.toInt,
-    limit = limit.toInt,
-    reset = Instant.ofEpochSecond(reset.toLong),
-    capturedAt = ZonedDateTime.parse(date, RFC_1123_DATE_TIME).toInstant
-  ))
-
-  def rateLimitFrom(response: Response): Quota = {
-    val networkResponse = Option(response.networkResponse())
-    Quota(
-      consumed = if (networkResponse.exists(_.code != NOT_MODIFIED)) 1 else 0,
-      networkResponse.flatMap(resp => rateLimitStatusFrom(resp.headers))
-    )
-  }
-
-  def requestScopesFrom(response: Response): Option[RequestScopes] = {
-    def scopes(h: String): Option[Set[String]] = Option(response.header(h)).map(_.split(',').map(_.trim).toSet)
-    for {
-      oAuthScopes <- scopes("X-OAuth-Scopes")
-      acceptedOAuthScopes <- scopes("X-Accepted-OAuth-Scopes")
-    } yield RequestScopes(oAuthScopes, acceptedOAuthScopes)
-  }
-
-  def linksFrom(response: Response): Seq[LinkTarget] = for {
-    linkHeader <- response.headers("Link").asScala.toSeq
-    linkTargets <- parse(linkHeader, LinkParser.linkValues(_)).get.value
-  } yield linkTargets
-
-  def from(resp: Response) =
-    ResponseMeta(rateLimitFrom(resp), requestScopesFrom(resp), linksFrom(resp))
-}
 
 case class GitHubResponse[Result](
   responseMeta: ResponseMeta,
@@ -138,8 +81,12 @@ object GitHub {
 
 }
 
-class GitHub(ghCredentials: GitHubCredentials) {
+class GitHub(ghCredentials: () => GitHubCredentials) {
   import GitHub._
+
+  val okHttpClient = new OkHttpClient.Builder()
+    .cache(new okhttp3.Cache(Files.createTempDirectory("github-api-cache").toFile, 5 * 1024 * 1024))
+    .build()
 
   def checkRateLimit()(implicit ec: EC): Future[Option[RateLimit.Status]] = {
     // GET /rate_limit  https://developer.github.com/v3/rate_limit/
@@ -304,12 +251,11 @@ class GitHub(ghCredentials: GitHubCredentials) {
   }
 
 
-
   def addAuthAndCaching(builder: Builder): Request =
     addAuth(builder).cacheControl(AlwaysHitNetwork).build()
 
   def addAuth(builder: Builder) = builder
-    .addHeader("Authorization", s"token ${ghCredentials.accessKey}")
+    .addHeader("Authorization", s"token ${ghCredentials().accessToken.value}")
 
   def getUser()(implicit ec: EC): Future[GitHubResponse[User]] =
     executeAndReadJson(addAuthAndCaching(new Builder().url(path("user"))))
@@ -399,7 +345,7 @@ class GitHub(ghCredentials: GitHubCredentials) {
   }
 
   def execute[T](request: Request)(processor: Response => T)(implicit ec: EC): Future[T] =
-    ghCredentials.okHttpClient.execute(request)(processor)
+    okHttpClient.execute(request)(processor)
 
   def apiUrlBuilder: HttpUrl.Builder = new HttpUrl.Builder().scheme("https").host("api.github.com")
 
