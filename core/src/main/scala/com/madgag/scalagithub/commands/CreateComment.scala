@@ -16,12 +16,12 @@
 
 package com.madgag.scalagithub.commands
 
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, OWrites}
 
 case class CreateComment(
   body: String
 )
 
 object CreateComment {
-  implicit val writesCreateComment = Json.writes[CreateComment]
+  implicit val writesCreateComment: OWrites[CreateComment] = Json.writes[CreateComment]
 }

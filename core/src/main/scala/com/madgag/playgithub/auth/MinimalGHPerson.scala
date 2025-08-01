@@ -16,7 +16,7 @@
 
 package com.madgag.playgithub.auth
 
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, OFormat}
 import play.api.libs.json.Json._
 import play.api.mvc.RequestHeader
 
@@ -24,7 +24,7 @@ object MinimalGHPerson {
 
   val SessionKey = "user"
 
-  implicit val formatsPerson = Json.format[MinimalGHPerson]
+  implicit val formatsPerson: OFormat[MinimalGHPerson] = Json.format[MinimalGHPerson]
 
   def fromRequest(implicit req: RequestHeader) = for {
     userJson <- req.session.get(SessionKey)

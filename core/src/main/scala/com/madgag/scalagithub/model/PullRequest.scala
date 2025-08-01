@@ -32,6 +32,7 @@ import java.time.ZonedDateTime
 import scala.concurrent.{ExecutionContext => EC}
 import Issue._
 import com.madgag.scalagithub._
+import okhttp3.HttpUrl
 
 case class CommitPointer(
   ref: String,
@@ -43,7 +44,7 @@ case class CommitPointer(
 }
 
 object CommitPointer {
-  implicit val readsCommitPointer = Json.reads[CommitPointer]
+  implicit val readsCommitPointer: Reads[CommitPointer] = Json.reads[CommitPointer]
 }
 
 trait Commentable {
@@ -104,8 +105,12 @@ case class Issue(
     override implicit val readsT: Reads[User] = User.readsUser
   }
 
+  /**
+   * https://docs.github.com/en/rest/issues/issues?apiVersion=2022-11-28#update-an-issue
+   * PATCH /repos/{owner}/{repo}/issues/{issue_number}
+   */
   def update(update: CreateOrUpdateIssue)(implicit g: GitHub, ec: EC): FR[Issue] =
-    g.executeAndReadJson[Issue](g.addAuth(new Builder().url(url).post(toJson(update))).build)
+    g.executeAndReadJson(_.url(url).patch(toJson(update)))
 
   def close()(implicit g: GitHub, ec: EC): FR[Issue] = update(CreateOrUpdateIssue(state = Some("closed")))
 }
@@ -145,12 +150,11 @@ case class PullRequest(
   lazy val compareUrl = baseRepo.compareUrl(base.sha.name(), head.sha.name())
 
   /**
-    * https://developer.github.com/v3/pulls/#merge-a-pull-request-merge-button
+    * https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#merge-a-pull-request
+    * PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge
     */
-  def merge(mergePullRequest: MergePullRequest)(implicit g: GitHub, ec: EC): FR[PullRequest.Merge] = {
-    // PUT /repos/:owner/:repo/pulls/:number/merge
-    g.executeAndReadJson(g.addAuth(new Builder().url(mergeUrl).put(toJson(mergePullRequest))).build())
-  }
+  def merge(mergePullRequest: MergePullRequest)(implicit g: GitHub, ec: EC): FR[PullRequest.Merge] =
+    g.put(HttpUrl.get(mergeUrl), mergePullRequest)
 
   /**
     * https://developer.github.com/v3/pulls/#list-commits-on-a-pull-request
@@ -214,5 +218,5 @@ object PullRequest {
     implicit val readsMerge: Reads[Merge] = Json.reads[Merge]
   }
 
-  implicit val readsPullRequest = Json.reads[PullRequest]
+  implicit val readsPullRequest: Reads[PullRequest] = Json.reads[PullRequest]
 }

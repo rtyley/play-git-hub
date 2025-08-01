@@ -68,9 +68,9 @@ case class Org(
 
   private def userField(suffix: String) =
     new CanList[User, String] with CanCheck[String] with CanDelete[String] {
-    override val link: Link[String] = Link.fromListUrl(s"$url/$suffix")
-    override implicit val readsT: Reads[User] = User.readsUser
-  }
+      override val link: Link[String] = Link.fromListUrl(s"$url/$suffix")
+      override implicit val readsT: Reads[User] = User.readsUser
+    }
 
   // GET /orgs/:org/members
   // GET /orgs/:org/members/:username
@@ -82,5 +82,5 @@ case class Org(
 }
 
 object Org {
-  implicit val readsUser = Json.reads[Org]
+  implicit val readsUser: Reads[Org] = Json.reads[Org]
 }

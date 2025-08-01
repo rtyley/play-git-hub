@@ -16,7 +16,7 @@
 
 package com.madgag.scalagithub.model
 
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, Reads}
 
 /*
 {
@@ -32,5 +32,5 @@ case class Email(
 )
 
 object Email {
-  implicit val readsEmail = Json.reads[Email]
+  implicit val readsEmail: Reads[Email] = Json.reads[Email]
 }

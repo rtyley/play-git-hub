@@ -17,8 +17,7 @@
 package com.madgag.scalagithub.commands
 
 import org.eclipse.jgit.lib.ObjectId
-import play.api.libs.json.Json
-
+import play.api.libs.json.{Json, OWrites}
 import com.madgag.scalagithub._
 
 /*
@@ -33,5 +32,5 @@ case class CreateRef(
 )
 
 object CreateRef {
-  implicit val writesCreateRef = Json.writes[CreateRef]
+  implicit val writesCreateRef: OWrites[CreateRef] = Json.writes[CreateRef]
 }

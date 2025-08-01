@@ -16,7 +16,7 @@
 
 package com.madgag.scalagithub.model
 
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, Reads}
 
 /*
 {
@@ -33,5 +33,5 @@ case class Label(
 
 
 object Label {
-  implicit val readsLabel = Json.reads[Label]
+  implicit val readsLabel: Reads[Label] = Json.reads[Label]
 }
