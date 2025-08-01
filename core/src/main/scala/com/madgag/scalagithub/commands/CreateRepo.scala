@@ -16,16 +16,16 @@
 
 package com.madgag.scalagithub.commands
 
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, OWrites}
 
 case class CreateRepo(
   name: String,
   description: Option[String] = None,
   `private`: Boolean
 ) {
-  val publicOrPrivateString = if (`private`) "private" else "public"
+  val publicOrPrivateString: String = if (`private`) "private" else "public"
 }
 
 object CreateRepo {
-  implicit val writesCreateRepo = Json.writes[CreateRepo]
+  implicit val writesCreateRepo: OWrites[CreateRepo] = Json.writes[CreateRepo]
 }

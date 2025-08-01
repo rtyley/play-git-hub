@@ -16,10 +16,10 @@
 
 package com.madgag.github
 
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, Reads}
 
 object GitHubAuthResponse {
-  implicit val readsGitHubAuthResponse = Json.reads[GitHubAuthResponse]
+  implicit val readsGitHubAuthResponse: Reads[GitHubAuthResponse] = Json.reads[GitHubAuthResponse]
 }
 
 case class GitHubAuthResponse(access_token: String)

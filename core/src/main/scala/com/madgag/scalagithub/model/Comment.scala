@@ -17,8 +17,7 @@
 package com.madgag.scalagithub.model
 
 import java.time.ZonedDateTime
-
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, Reads}
 
 case class Comment(
   id: Long,
@@ -31,5 +30,5 @@ case class Comment(
 ) extends Deletable // https://developer.github.com/v3/issues/comments/#delete-a-comment
 
 object Comment {
-  implicit val readsComment = Json.reads[Comment]
+  implicit val readsComment: Reads[Comment] = Json.reads[Comment]
 }

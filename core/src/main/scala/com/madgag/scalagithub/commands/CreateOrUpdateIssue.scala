@@ -16,7 +16,7 @@
 
 package com.madgag.scalagithub.commands
 
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, OWrites}
 
 /**
  * https://docs.github.com/en/rest/issues/issues?apiVersion=2022-11-28#create-an-issue
@@ -30,5 +30,5 @@ case class CreateOrUpdateIssue(
 )
 
 object CreateOrUpdateIssue {
-  implicit val writesCreateIssue = Json.writes[CreateOrUpdateIssue]
+  implicit val writesCreateIssue: OWrites[CreateOrUpdateIssue] = Json.writes[CreateOrUpdateIssue]
 }

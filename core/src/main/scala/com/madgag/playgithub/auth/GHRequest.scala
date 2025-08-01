@@ -20,10 +20,10 @@ import com.madgag.scalagithub.{GitHub, GitHubCredentials}
 import play.api.mvc._
 
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 class GHRequest[A](val gitHubCredentials: GitHubCredentials, request: Request[A]) extends WrappedRequest[A](request) {
-
-  val gitHub = new GitHub(gitHubCredentials)
+  val gitHub = new GitHub(() => Future.successful(gitHubCredentials))
 
   lazy val userF = gitHub.getUser().map(_.result)
 

@@ -17,8 +17,7 @@
 package com.madgag.scalagithub.model
 
 import org.eclipse.jgit.lib.ObjectId
-import play.api.libs.json.Json
-
+import play.api.libs.json.{Json, Reads}
 import com.madgag.scalagithub._
 
 /*
@@ -69,8 +68,8 @@ object Tree {
   )
 
   object Entry {
-    implicit val readsEntry = Json.reads[Entry]
+    implicit val readsEntry: Reads[Entry] = Json.reads[Entry]
   }
 
-  implicit val readsTree = Json.reads[Tree]
+  implicit val readsTree: Reads[Tree] = Json.reads[Tree]
 }

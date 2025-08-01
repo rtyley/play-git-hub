@@ -17,8 +17,7 @@
 package com.madgag.scalagithub.model
 
 import java.time.ZonedDateTime
-
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, Reads}
 
 /*
 [
@@ -67,6 +66,6 @@ case class Status(
 
 object Status {
 
-  implicit val readsStatus = Json.reads[Status]
+  implicit val readsStatus: Reads[Status] = Json.reads[Status]
 
 }

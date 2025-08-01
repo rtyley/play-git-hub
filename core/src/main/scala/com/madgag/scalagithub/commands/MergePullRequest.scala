@@ -17,7 +17,7 @@
 package com.madgag.scalagithub.commands
 
 import org.eclipse.jgit.lib.ObjectId
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, OWrites}
 import com.madgag.scalagithub._
 
 case class MergePullRequest(
@@ -26,5 +26,5 @@ case class MergePullRequest(
 )
 
 object MergePullRequest {
-  implicit val writesMergePullRequest = Json.writes[MergePullRequest]
+  implicit val writesMergePullRequest: OWrites[MergePullRequest] = Json.writes[MergePullRequest]
 }

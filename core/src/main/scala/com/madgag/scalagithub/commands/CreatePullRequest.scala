@@ -16,7 +16,7 @@
 
 package com.madgag.scalagithub.commands
 
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, OWrites}
 
 case class CreatePullRequest(
   title: String,
@@ -26,5 +26,5 @@ case class CreatePullRequest(
 )
 
 object CreatePullRequest {
-  implicit val writesCreatePullRequest = Json.writes[CreatePullRequest]
+  implicit val writesCreatePullRequest: OWrites[CreatePullRequest] = Json.writes[CreatePullRequest]
 }

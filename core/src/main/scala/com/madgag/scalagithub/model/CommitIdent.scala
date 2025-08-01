@@ -17,8 +17,7 @@
 package com.madgag.scalagithub.model
 
 import java.time.ZonedDateTime
-
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, Reads}
 
 // https://developer.github.com/v3/pulls/#list-commits-on-a-pull-request
 case class CommitIdent(
@@ -26,9 +25,9 @@ case class CommitIdent(
  email: String,
  date: ZonedDateTime
 ) {
-  lazy val addressString = s"$name <$email>"
+  lazy val addressString: String = s"$name <$email>"
 }
 
 object CommitIdent {
-  implicit val readsCommitIdent = Json.reads[CommitIdent]
+  implicit val readsCommitIdent: Reads[CommitIdent] = Json.reads[CommitIdent]
 }

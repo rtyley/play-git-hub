@@ -16,7 +16,7 @@
 
 package com.madgag.scalagithub.commands
 
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, OWrites}
 
 /*
 {
@@ -30,5 +30,5 @@ case class CreateLabel(
 )
 
 object CreateLabel {
-  implicit val writesLabel = Json.writes[CreateLabel]
+  implicit val writesLabel: OWrites[CreateLabel] = Json.writes[CreateLabel]
 }

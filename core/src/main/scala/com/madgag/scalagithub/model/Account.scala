@@ -16,13 +16,12 @@
 
 package com.madgag.scalagithub.model
 
-import java.time.ZonedDateTime
-
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.FR
-import okhttp3.Request.Builder
+import okhttp3.HttpUrl
 import play.api.libs.json.Reads
 
+import java.time.ZonedDateTime
 import scala.concurrent.{ExecutionContext => EC}
 
 trait Account {
@@ -37,10 +36,8 @@ trait Account {
 
   val atLogin = s"@$login"
 
-  lazy val displayName = name.filter(_.nonEmpty).getOrElse(atLogin)
+  lazy val displayName: String = name.filter(_.nonEmpty).getOrElse(atLogin)
 
-  def reFetch()(implicit g: GitHub, ec: EC, ev: Reads[Self]): FR[Self]  = {
-    g.executeAndReadJson[Self](g.addAuthAndCaching(new Builder().url(url)))
-  }
+  def reFetch()(implicit g: GitHub, ec: EC, ev: Reads[Self]): FR[Self]  = g.getAndCache[Self](HttpUrl.get(url))
 
 }

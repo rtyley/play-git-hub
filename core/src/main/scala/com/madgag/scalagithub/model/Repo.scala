@@ -19,7 +19,7 @@ package com.madgag.scalagithub.model
 import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.scaladsl.Source
 import com.madgag.scalagithub.GitHub
-import com.madgag.scalagithub.GitHub.FR
+import com.madgag.scalagithub.GitHub.{FR, RichOkHttpBuilder}
 import com.madgag.scalagithub.commands._
 import okhttp3.HttpUrl
 import okhttp3.Request.Builder
@@ -122,13 +122,11 @@ case class Repo(
   // https://developer.github.com/v3/issues/labels/#get-a-single-label
   // https://developer.github.com/v3/issues/labels/#create-a-label
 
-  def combinedStatusFor(ref: String)(implicit g: GitHub, ec: EC): FR[CombinedStatus] = {
-    g.executeAndReadJson(g.addAuthAndCaching(new Builder().url(commits.urlFor(ref) + "/status")))
-  }
+  def combinedStatusFor(ref: String)(implicit g: GitHub, ec: EC): FR[CombinedStatus] =
+    g.getAndCache(HttpUrl.get(commits.urlFor(ref) + "/status"))
 
-  def statusesFor(ref: String)(implicit g: GitHub, ec: EC): FR[Seq[Status]] = {
-    g.executeAndReadJson(g.addAuthAndCaching(new Builder().url(commits.urlFor(ref) + "/statuses")))
-  }
+  def statusesFor(ref: String)(implicit g: GitHub, ec: EC): FR[Seq[Status]] =
+    g.getAndCache(HttpUrl.get(commits.urlFor(ref) + "/statuses"))
 
   val settingsUrl = s"$html_url/settings"
 
@@ -163,18 +161,15 @@ trait CanCreate[T, ID, CC] extends Writer[T, CC] {
 
   val link: Link[ID]
 
-  def create(cc: CC)(implicit g: GitHub, ec: EC): FR[T] = {
-    g.executeAndReadJson[T](g.addAuth(new Builder().url(link.listUrl).post(toJson(cc))).build())
-  }
+  def create(cc: CC)(implicit g: GitHub, ec: EC): FR[T] = g.create(HttpUrl.get(link.listUrl), cc)
 }
 
 trait CanPut[T, ID, CC] extends Writer[T, CC] {
 
   val link: Link[ID]
 
-  def put(id: ID, cc: CC)(implicit g: GitHub, ec: EC): FR[T] = {
-    g.executeAndReadJson[T](g.addAuth(new Builder().url(link.urlFor(id)).put(toJson(cc))).build())
-  }
+  def put(id: ID, cc: CC)(implicit g: GitHub, ec: EC): FR[T] =
+    g.put[CC, T](HttpUrl.get(link.urlFor(id)), cc)
 }
 
 trait CanList[T, ID] extends Reader[T] {
@@ -192,36 +187,35 @@ trait CanGet[T, ID] extends Reader[T] {
 
   val link: Link[ID]
 
-  def get(id: ID)(implicit g: GitHub, ec: EC): FR[T] = {
-    g.executeAndReadJson[T](g.addAuthAndCaching(new Builder().url(link.urlFor(id))))
-  }
+  def get(id: ID)(implicit g: GitHub, ec: EC): FR[T] = g.getAndCache[T](HttpUrl.get(link.urlFor(id)))
 }
 
 trait CanCheck[ID] {
 
   val link: Link[ID]
 
-  def check(id: ID)(implicit g: GitHub, ec: EC): FR[Boolean] = {
-    g.executeAndCheck(g.addAuthAndCaching(new Builder().url(link.urlFor(id))))
-  }
+  def check(id: ID)(implicit g: GitHub, ec: EC): FR[Boolean] =
+    g.executeAndCheck(_.url(link.urlFor(id)))
 }
 
 trait CanDelete[ID] {
 
   val link: Link[ID]
 
-  def delete(id: ID)(implicit g: GitHub, ec: EC): FR[Boolean] = {
-    g.executeAndCheck(g.addAuthAndCaching(new Builder().url(link.urlFor(id)).delete()))
-  }
+  def delete(id: ID)(implicit g: GitHub, ec: EC): FR[Boolean] =
+    g.executeAndCheck(_.url(link.urlFor(id)).delete())
 }
 
 trait CanReplace[T, ID] extends Reader[T] {
 
   val link: Link[ID]
 
-  def replace(ids: Seq[ID])(implicit g: GitHub, ec: EC, w: Writes[ID]): FR[Seq[T]] = {
-    g.executeAndReadJson[Seq[T]](g.addAuth(new Builder().url(link.listUrl).put(toJson(ids))).build())
-  }
+  /**
+   * Eg
+   * https://docs.github.com/en/rest/issues/labels?apiVersion=2022-11-28#set-labels-for-an-issue
+   */
+  def replace(ids: Seq[ID])(implicit g: GitHub, ec: EC, w: Writes[ID]): FR[Seq[T]] =
+    g.put(HttpUrl.get(link.listUrl), ids)
 }
 
 trait Link[P] {
@@ -253,7 +247,7 @@ object Link {
 case class SuffixedEndpointHandler[P](suffixedUrl: String, suffix: String) extends Link[P] {
   val encasedSuffix = s"{$suffix}"
 
-  def urlFor(p: P) = suffixedUrl.replace(encasedSuffix, s"/$p")
+  def urlFor(p: P): String = suffixedUrl.replace(encasedSuffix, s"/$p")
 
   val listUrl = suffixedUrl.stripSuffix(encasedSuffix)
 }
@@ -265,7 +259,7 @@ case class Permissions(
 )
 
 object Permissions {
-  implicit val readsPermissions = Json.reads[Permissions]
+  implicit val readsPermissions: Reads[Permissions] = Json.reads[Permissions]
 }
 
 
@@ -282,11 +276,11 @@ object Repo {
     permission: String
   ) extends Deletable // https://developer.github.com/v3/orgs/teams/#delete-team
   {
-    val atSlug = "@" + slug
+    val atSlug: String = "@" + slug
   }
 
   object Team {
-    implicit val readsTeam = Json.reads[Team]
+    implicit val readsTeam: Reads[Team] = Json.reads[Team]
   }
 
   class Trees(suppliedLink: Link[String]) extends CCreator[Tree, String, CreateTree](suppliedLink) with CanGetAndCreate[Tree, String, CreateTree] {
@@ -294,11 +288,10 @@ object Repo {
     // https://developer.github.com/v3/git/trees/#get-a-tree
     // https://developer.github.com/v3/git/trees/#create-a-tree
 
-    def getRecursively(sha: String)(implicit g: GitHub, ec: EC) = {
-      g.executeAndReadJson[Tree](g.addAuthAndCaching(new Builder().url(link.urlFor(sha)+"?recursive=1")))
-    }
+    def getRecursively(sha: String)(implicit g: GitHub, ec: EC): FR[Tree] =
+      g.getAndCache(HttpUrl.get(link.urlFor(sha)+"?recursive=1"))
 
   }
 
-  implicit val readsRepo = Json.reads[Repo]
+  implicit val readsRepo: Reads[Repo] = Json.reads[Repo]
 }

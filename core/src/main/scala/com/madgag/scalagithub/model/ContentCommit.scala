@@ -17,8 +17,7 @@
 package com.madgag.scalagithub.model
 
 import org.eclipse.jgit.lib.ObjectId
-import play.api.libs.json.Json
-
+import play.api.libs.json.{Json, Reads}
 import com.madgag.scalagithub._
 
 /*
@@ -81,7 +80,7 @@ case class Content(
 )
 
 object Content {
-  implicit val readsContent = Json.reads[Content]
+  implicit val readsContent: Reads[Content] = Json.reads[Content]
 }
 
 case class Commit(
@@ -95,7 +94,7 @@ case class ContentCommit(content: Content, commit: Commit)
 
 
 object ContentCommit {
-  implicit val readsCommit = Json.reads[Commit]
+  implicit val readsCommit: Reads[Commit] = Json.reads[Commit]
 
-  implicit val readsContentCommit = Json.reads[ContentCommit]
+  implicit val readsContentCommit: Reads[ContentCommit] = Json.reads[ContentCommit]
 }

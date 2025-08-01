@@ -43,12 +43,12 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
   implicit val materializer: Materializer
   val repoLifecycle: RepoLifecycle
 
-  def isRecentTestRepo(repo: Repo): Boolean =
+  def isOldTestRepo(repo: Repo): Boolean =
     repo.name.startsWith(testRepoNamePrefix) && repo.created_at.toInstant.age() > ofMinutes(30)
 
   def deleteTestRepos()(implicit ec: ExecutionContext): Future[Unit] = for {
     oldRepos <- repoLifecycle.listAllRepos()
-    _ <- Future.traverse(oldRepos.filter(isRecentTestRepo))(_.delete())
+    _ <- Future.traverse(oldRepos.filter(isOldTestRepo))(_.delete())
   } yield ()
 
   def createTestRepo(fileName: String)(implicit ec: ExecutionContext): Repo = {

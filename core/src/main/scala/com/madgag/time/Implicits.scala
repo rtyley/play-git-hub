@@ -16,12 +16,11 @@
 
 package com.madgag.time
 
-import _root_.java.time.{Instant, Duration, Clock}
+import _root_.java.time.{Clock, Duration, Instant}
 import _root_.java.time.temporal.Temporal
 import java.util.concurrent.TimeUnit
-
 import java.{time => java}
-import org.joda.{time => joda}
+import org.joda.{time, time => joda}
 
 import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
@@ -48,12 +47,12 @@ object Implicits {
   implicit def jodaDateTime2JavaZonedDateTime(dateTime: joda.DateTime): java.ZonedDateTime =
     java.ZonedDateTime.ofInstant(dateTime.toInstant, dateTime.getZone)
 
-  implicit def scalaDuration2javaDuration(dur: scala.concurrent.duration.Duration) = java.Duration.ofNanos(dur.toNanos)
+  implicit def scalaDuration2javaDuration(dur: scala.concurrent.duration.Duration): Duration = java.Duration.ofNanos(dur.toNanos)
 
-  implicit def duration2SDuration(dur: joda.Duration) = FiniteDuration(dur.getMillis, TimeUnit.MILLISECONDS)
+  implicit def duration2SDuration(dur: joda.Duration): FiniteDuration = FiniteDuration(dur.getMillis, TimeUnit.MILLISECONDS)
 
-  implicit def javaDuration2SDuration(dur: java.Duration) = FiniteDuration(dur.toMillis, TimeUnit.MILLISECONDS)
+  implicit def javaDuration2SDuration(dur: java.Duration): FiniteDuration = FiniteDuration(dur.toMillis, TimeUnit.MILLISECONDS)
 
-  implicit def javaDuration2jodaDuration(dur: java.Duration) = joda.Duration.millis(dur.toMillis)
+  implicit def javaDuration2jodaDuration(dur: java.Duration): time.Duration = joda.Duration.millis(dur.toMillis)
 
 }

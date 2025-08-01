@@ -32,7 +32,7 @@ object Actions {
   class GitHubAuthenticatedAction(scopes: Seq[String], workingDir: Path, parser: BodyParser[AnyContent])(
     implicit ec: ExecutionContext, authClient: Client, accessTokenProvider: AccessToken.Provider
   ) extends AuthenticatedBuilder[GitHubCredentials](
-    { req: RequestHeader => accessTokenProvider(req).flatMap(accessKey => GitHubCredentials.forAccessKey(accessKey, workingDir).toOption) },
+    { req: RequestHeader => accessTokenProvider(req).map(accessKey => GitHubCredentials(com.madgag.github.AccessToken(accessKey))) },
     parser,
     onUnauthorized = implicit req => authClient.redirectForAuthWith(scopes).addingToSession(RedirectToPathAfterAuthKey -> req.path)
   )

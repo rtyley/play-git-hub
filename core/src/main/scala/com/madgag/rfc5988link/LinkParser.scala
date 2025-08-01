@@ -30,14 +30,14 @@ case class LinkTarget(url: HttpUrl, attributes: Seq[(String, String)]) {
 }
 
 object LinkParser {
-  def url[_: P]: P[HttpUrl] = P("<" ~/ CharsWhile(_ != '>', 1).! ~ ">").map(HttpUrl.parse)
+  def url[$: P]: P[HttpUrl] = P("<" ~/ CharsWhile(_ != '>', 1).! ~ ">").map(HttpUrl.parse)
 
-  def linkParam[_: P]: P[(String, String)] =
+  def linkParam[$: P]: P[(String, String)] =
     P("; " ~ CharsWhile(_ != '=',1).! ~ "=\"" ~ CharsWhile(_ != '"',1).! ~ "\"" )
 
-  def linkTarget[_: P]: P[LinkTarget] = (url ~ linkParam.rep).map {
+  def linkTarget[$: P]: P[LinkTarget] = (url ~ linkParam.rep).map {
     case (a, b) => LinkTarget(a, b)
   }
 
-  def linkValues[_: P]: P[Seq[LinkTarget]] = linkTarget.rep(sep = ", ")
+  def linkValues[$: P]: P[Seq[LinkTarget]] = linkTarget.rep(sep = ", ")
 }

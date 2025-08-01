@@ -37,5 +37,5 @@ case class User(
 }
 
 object User {
-  implicit val readsUser = Json.reads[User]
+  implicit val readsUser: Reads[User] = Json.reads[User]
 }

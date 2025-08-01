@@ -25,6 +25,5 @@ import scala.concurrent.{ExecutionContext => EC, Future}
 trait Deletable {
   val url: String
 
-  def delete()(implicit g: GitHub, ec: EC): FR[Boolean] =
-    g.executeAndCheck(g.addAuth(new Builder().url(url).delete()).build())
+  def delete()(implicit g: GitHub, ec: EC): FR[Boolean] = g.executeAndCheck(_.url(url).delete())
 }

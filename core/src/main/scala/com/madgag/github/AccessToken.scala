@@ -18,9 +18,8 @@ package com.madgag.github
 
 import com.github.blemale.scaffeine.{AsyncLoadingCache, Scaffeine}
 import com.madgag.github.AccessTokenCache.timeUntilNearExpirationOf
-import com.madgag.github.apps.InstallationTokenResponse
 import com.madgag.scalagithub.GitHubCredentials
-import play.api.libs.json.{JsPath, Json, Reads}
+import play.api.libs.json.{JsPath, Reads}
 
 import java.time.Clock.systemUTC
 import java.time.{Clock, Duration, Instant}
