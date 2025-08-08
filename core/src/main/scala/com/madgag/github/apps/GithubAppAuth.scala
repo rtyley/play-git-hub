@@ -41,7 +41,7 @@ class GithubAppAuth(jwts: GitHubAppJWTs) extends Logging {
    * https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#create-an-installation-access-token-for-an-app
    */
   def getInstallationAccessToken(installationId: String)(implicit ec: ExecutionContext): Future[InstallationTokenResponse] =
-    request[InstallationTokenResponse](_.url(path(s"app/installations/$installationId/access_tokens")).post(EmptyRequestBody), 201)
+    request[InstallationTokenResponse](_.url(path("app", "installations", installationId, "access_tokens")).post(EmptyRequestBody), 201)
 
   /**
    * https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#get-the-authenticated-app
