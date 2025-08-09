@@ -23,6 +23,7 @@ import org.eclipse.jgit.transport.{CredentialsProvider, TransportHttp, UsernameP
 
 import java.nio.charset.StandardCharsets
 import java.util.Base64
+import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
 
 case class GitHubCredentials(accessToken: AccessToken) {
@@ -41,6 +42,10 @@ case class GitHubCredentials(accessToken: AccessToken) {
    */
   def applyAuthTo[C <: TransportCommand[C, T], T](transportCommand: C): C =
     transportCommand.setCredentialsProvider(git).setTransportConfigCallback(bearerAuth(accessToken.value))
+}
+
+object GitHubCredentials {
+  type Provider = () => Future[GitHubCredentials]
 }
 
 object BearerAuthTransportConfig {
