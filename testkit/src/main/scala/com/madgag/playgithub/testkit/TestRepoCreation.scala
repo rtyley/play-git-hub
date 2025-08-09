@@ -24,6 +24,7 @@ import com.madgag.scalagithub.commands.CreateRepo
 import com.madgag.scalagithub.model.Repo
 import com.madgag.scalagithub.{GitHub, GitHubCredentials}
 import com.madgag.time.Implicits._
+import org.apache.pekko.actor.ActorSystem
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.scalatest.Inspectors.forAll
@@ -40,7 +41,7 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
   val testRepoNamePrefix: String
   val githubCredentials: GitHubCredentials
   implicit val github: GitHub
-  implicit val materializer: Materializer
+  implicit val actorSystem: ActorSystem
   val repoLifecycle: RepoLifecycle
 
   def isOldTestRepo(repo: Repo): Boolean =
