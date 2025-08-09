@@ -17,25 +17,26 @@
 package com.madgag.playgithub.testkit
 
 import org.apache.pekko.stream.Materializer
-import com.madgag.github.Implicits.RichSource
+import com.madgag.github.Implicits._
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.commands.CreateRepo
 import com.madgag.scalagithub.model.{Org, Repo}
+import org.apache.pekko.actor.ActorSystem
 
 import scala.concurrent.{ExecutionContext, Future}
 
 trait RepoLifecycle {
   def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: ExecutionContext): FR[Repo]
 
-  def listAllRepos()(implicit github: GitHub, ec: ExecutionContext, m: Materializer): Future[Seq[Repo]]
+  def listAllRepos()(implicit github: GitHub, ec: ExecutionContext, as: ActorSystem): Future[Seq[Repo]]
 }
 
 case object UserRepoLifecycle extends RepoLifecycle {
   def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: ExecutionContext): FR[Repo] =
     github.createRepo(cr)
 
-  def listAllRepos()(implicit github: GitHub, ec: ExecutionContext, m: Materializer): Future[Seq[Repo]] =
+  def listAllRepos()(implicit github: GitHub, ec: ExecutionContext, as: ActorSystem): Future[Seq[Repo]] =
     github.listRepos("updated", "desc").all()
 }
 
@@ -43,6 +44,6 @@ case class OrgRepoLifecycle(org: Org) extends RepoLifecycle {
   def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: ExecutionContext): FR[Repo] =
     github.createOrgRepo(org.login, cr)
 
-  def listAllRepos()(implicit github: GitHub, ec: ExecutionContext, m: Materializer): Future[Seq[Repo]] =
+  def listAllRepos()(implicit github: GitHub, ec: ExecutionContext, as: ActorSystem): Future[Seq[Repo]] =
     github.listOrgRepos(org.login,"updated", "desc").all()
 }

@@ -41,3 +41,7 @@ trait Account {
   def reFetch()(implicit g: GitHub, ec: EC, ev: Reads[Self]): FR[Self]  = g.getAndCache[Self](HttpUrl.get(url))
 
 }
+
+object Account {
+  implicit val reads: Reads[Account] = Org.readsUser.widen[Account].orElse(User.readsUser.widen[Account])
+}
