@@ -106,22 +106,27 @@ object GitHub {
   }.build()
 }
 
-class GitHub(ghCredentials: () => Future[GitHubCredentials]) {
+class GitHub(ghCredentials: GitHubCredentials.Provider) {
   import GitHub._
 
   val okHttpClient = new OkHttpClient.Builder()
     .cache(new okhttp3.Cache(Files.createTempDirectory("github-api-cache").toFile, 5 * 1024 * 1024))
     .build()
 
-  def addAuth(builder: Builder)(implicit ec: EC): Future[Builder] = for {
-    creds <- ghCredentials()
-  } yield builder.addHeader("Authorization", s"token ${creds.accessToken.value}")
+  def addAuth(builder: Builder)(implicit ec: EC): Future[Builder] = {
+    val credsF = ghCredentials()
+    for {
+      creds <- credsF
+    } yield builder.addHeader("Authorization", s"token ${creds.accessToken.value}")
+  }
 
   def executeAndWrap[T](settings: ReqMod)(processor: (Request, Response) => T)(implicit ec: EC): FR[T] = for {
     builderWithAuth <- addAuth(settings(new Builder()))
     request = builderWithAuth.build()
-    response <- okHttpClient.execute(request)(identity)
-  } yield GitHubResponse(logAndGetMeta(request, response), processor(request, response))
+    response <- okHttpClient.execute(request) {
+      resp => GitHubResponse(logAndGetMeta(request, resp), processor(request, resp))
+    }
+  } yield response
 
   def executeAndReadJson[T: Reads](settings: ReqMod)(implicit ec: EC): FR[T] = executeAndWrap(settings) {
     case (req, response) => readAndResolve[T](req, response)
@@ -200,28 +205,35 @@ class GitHub(ghCredentials: () => Future[GitHubCredentials]) {
   def getTreeRecursively(repo: Repo, sha: String)(implicit ec: EC): FR[Tree] =
     getAndCache(HttpUrl.get(repo.trees.urlFor(sha)+"?recursive=1"))
 
-  def followAndEnumerate[T](url: HttpUrl)(implicit ev: Reads[T], ec: EC): Source[Seq[T], NotUsed] = Source.unfoldAsync[Option[HttpUrl],Seq[T]](Some(url)) {
+  def followAndEnumerate[T](url: HttpUrl)(implicit ev: Reads[T], ec: EC): Source[T, NotUsed] = Source.unfoldAsync[Option[HttpUrl],T](Some(url)) {
     case Some(nextUrl) =>
       logger.debug(s"Following $nextUrl")
       for {
-        response <- getAndCache[Seq[T]](nextUrl)
+        response <- getAndCache[T](nextUrl)
       } yield Some(response.responseMeta.nextOpt -> response.result)
     case None => Future.successful(None)
   }
 
   /**
-    * https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-repositories-for-the-authenticated-user
-    * GET /user/repos
-    */
+   * [[https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-repositories-for-the-authenticated-user]]
+   * GET /user/repos
+   */
   def listRepos(sort: String, direction: String)(implicit ec: EC): Source[Seq[Repo], NotUsed] =
-    followAndEnumerate[Repo](path("user", "repos"))
+    followAndEnumerate[Seq[Repo]](path("user", "repos"))
 
   /**
-   * https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-organization-repositories
+   * [[https://docs.github.com/en/rest/apps/installations?apiVersion=2022-11-28#list-repositories-accessible-to-the-app-installation]]
+   * GET /installation/repositories
+   */
+  def listReposAccessibleToTheApp()(implicit ec: EC): Source[InstallationRepos, NotUsed] =
+    followAndEnumerate[InstallationRepos](path("installation", "repositories"))
+
+  /**
+   * [[https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-organization-repositories]]
    * GET /orgs/{org}/repos
    */
   def listOrgRepos(org: String, sort: String, direction: String)(implicit ec: EC): Source[Seq[Repo], NotUsed] =
-    followAndEnumerate[Repo](path("orgs", org, "repos"))
+    followAndEnumerate[Seq[Repo]](path("orgs", org, "repos"))
 
   /**
    * https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
@@ -267,7 +279,8 @@ class GitHub(ghCredentials: () => Future[GitHubCredentials]) {
   def getTeam(teamId: Long)(implicit ec: EC): FR[Team] = getAndCache(path("teams", teamId.toString))
 
   /**
-   * https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#get-a-team-by-name
+   * [[https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#get-a-team-by-name]]
+   * GET /orgs/{org}/teams/{team_slug}
    */
   def getTeamByName(org: String, team_slug: String)(implicit ec: EC): FR[Option[Team]] = {
     // GET /orgs/{org}/teams/{team_slug}
@@ -298,7 +311,7 @@ class GitHub(ghCredentials: () => Future[GitHubCredentials]) {
   def getUser(username: String)(implicit ec: EC): FR[User] = getAndCache(path("users", username))
 
   def listTeamMembers(org: String, teamSlug: String)(implicit ec: EC): Source[Seq[User],NotUsed] =
-    followAndEnumerate[User](path("orgs", org, "teams", teamSlug, "members"))
+    followAndEnumerate[Seq[User]](path("orgs", org, "teams", teamSlug, "members"))
 
   /**
     * https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#add-or-update-team-repository-permissions-legacy
@@ -330,4 +343,13 @@ class GitHub(ghCredentials: () => Future[GitHubCredentials]) {
   def listComments(commentable: Commentable)(implicit ec: EC): FR[Seq[Comment]] =
     getAndCache(HttpUrl.get(commentable.comments_url))
 
+}
+
+case class InstallationRepos(
+  total_count: Int,
+  repositories: Seq[Repo]
+)
+
+object InstallationRepos {
+  implicit val reads: Reads[InstallationRepos] = Json.reads
 }

@@ -17,7 +17,7 @@
 package com.madgag.github
 
 import org.apache.pekko.NotUsed
-import org.apache.pekko.stream.Materializer
+import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.{Keep, Sink}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -25,8 +25,13 @@ import scala.concurrent._
 import scala.util.{Success, Try}
 
 object Implicits {
-  implicit class RichSource[T](s: org.apache.pekko.stream.scaladsl.Source[Seq[T], NotUsed]) {
-    def all()(implicit mat: Materializer): Future[Seq[T]] = s.toMat(Sink.reduce[Seq[T]](_ ++ _))(Keep.right).run()
+
+  implicit class RichItemSource[T](s: org.apache.pekko.stream.scaladsl.Source[T, NotUsed]) {
+    def allItems()(implicit as: ActorSystem): Future[Seq[T]] = s.toMat(Sink.seq)(Keep.right).run()
+  }
+
+  implicit class RichSeqSource[T](s: org.apache.pekko.stream.scaladsl.Source[Seq[T], NotUsed]) {
+    def all()(implicit as: ActorSystem): Future[Seq[T]] = s.toMat(Sink.reduce[Seq[T]](_ ++ _))(Keep.right).run()
   }
 
   implicit class RichFuture[S](f: Future[S]) {

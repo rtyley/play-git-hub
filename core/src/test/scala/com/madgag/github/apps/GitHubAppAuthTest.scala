@@ -1,0 +1,34 @@
+/*
+ * Copyright 2025 Roberto Tyley
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.madgag.github.apps
+
+import org.scalatest.OptionValues
+import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+
+import scala.concurrent.ExecutionContext.Implicits.global
+
+class GitHubAppAuthTest extends AnyFlatSpec with Matchers with OptionValues with ScalaFutures with IntegrationPatience {
+  val gitHubAppAuth: GitHubAppAuth = GitHubAppAuth.fromConfigMap(sys.env, prefix="PLAY_GIT_HUB_TEST")
+
+  it should "be able to request GitHub App installations" in {
+    val installation = gitHubAppAuth.getInstallations().futureValue.head
+    installation.id shouldBe 80021990
+    installation.account.login shouldBe "play-git-hub-test-org"
+  }
+}

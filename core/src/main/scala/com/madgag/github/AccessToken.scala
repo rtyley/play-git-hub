@@ -17,7 +17,7 @@
 package com.madgag.github
 
 import com.github.blemale.scaffeine.{AsyncLoadingCache, Scaffeine}
-import com.madgag.github.AccessTokenCache.timeUntilNearExpirationOf
+import com.madgag.github.AccessToken.Cache.timeUntilNearExpirationOf
 import com.madgag.scalagithub.GitHubCredentials
 import play.api.libs.json.{JsPath, Reads}
 
@@ -31,6 +31,26 @@ case class AccessToken(value: String) extends AnyVal
 
 object AccessToken {
   implicit val reads: Reads[AccessToken] = JsPath.read[String].map(AccessToken(_))
+
+  class Cache(provider: () => Future[Expirable[AccessToken]])(implicit ec: ExecutionContext)
+    extends GitHubCredentials.Provider {
+
+    private val cache: AsyncLoadingCache[Unit, Expirable[GitHubCredentials]] = Scaffeine()
+      .maximumSize(1)
+      .expireAfter[Unit, Expirable[GitHubCredentials]](
+        create = (_, token) => timeUntilNearExpirationOf(token),
+        update = (_, token, _) => timeUntilNearExpirationOf(token),
+        read = (_, _, currentDuration) => currentDuration
+      )
+      .buildAsyncFuture(_ => provider().map(_.map(GitHubCredentials(_))))
+
+    override def apply(): Future[GitHubCredentials] = cache.get(()).map(_.value)
+  }
+
+  object Cache {
+    def timeUntilNearExpirationOf(expirable: Expirable[_])(implicit clock: Clock = systemUTC): FiniteDuration =
+      Duration.between(clock.instant(), expirable.expires).toScala * 9 div 10
+  }
 }
 
 case class Expirable[T](
@@ -40,22 +60,3 @@ case class Expirable[T](
   def map[S](f: T => S): Expirable[S] = copy(f(value))
 }
 
-class AccessTokenCache(provider: () => Future[Expirable[AccessToken]])(implicit ec: ExecutionContext)
-  extends (() => Future[GitHubCredentials]) {
-
-  private val cache: AsyncLoadingCache[Unit, Expirable[GitHubCredentials]] = Scaffeine()
-    .maximumSize(1)
-    .expireAfter[Unit, Expirable[GitHubCredentials]](
-      create = (_, token) => timeUntilNearExpirationOf(token),
-      update = (_, token, _) => timeUntilNearExpirationOf(token),
-      read = (_, _, currentDuration) => currentDuration
-    )
-    .buildAsyncFuture(_ => provider().map(_.map(GitHubCredentials(_))))
-
-  override def apply(): Future[GitHubCredentials] = cache.get(()).map(_.value)
-}
-
-object AccessTokenCache {
-  def timeUntilNearExpirationOf(expirable: Expirable[_])(implicit clock: Clock = systemUTC): FiniteDuration =
-    Duration.between(clock.instant(), expirable.expires).toScala * 9 div 10
-}

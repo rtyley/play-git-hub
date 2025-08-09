@@ -16,7 +16,6 @@
 
 package com.madgag.playgithub.testkit
 
-import org.apache.pekko.stream.Materializer
 import com.madgag.git.RichRepo
 import com.madgag.git.test.unpackRepo
 import com.madgag.github.Implicits._
@@ -24,6 +23,7 @@ import com.madgag.scalagithub.commands.CreateRepo
 import com.madgag.scalagithub.model.Repo
 import com.madgag.scalagithub.{GitHub, GitHubCredentials}
 import com.madgag.time.Implicits._
+import org.apache.pekko.actor.ActorSystem
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.scalatest.Inspectors.forAll
@@ -38,9 +38,9 @@ import scala.jdk.CollectionConverters._
 trait TestRepoCreation extends Eventually with ScalaFutures {
 
   val testRepoNamePrefix: String
-  val githubCredentials: GitHubCredentials
-  implicit val github: GitHub
-  implicit val materializer: Materializer
+  val githubCredentialsProvider: GitHubCredentials.Provider
+  implicit val github: GitHub = new GitHub(githubCredentialsProvider)
+  implicit val actorSystem: ActorSystem
   val repoLifecycle: RepoLifecycle
 
   def isOldTestRepo(repo: Repo): Boolean =
@@ -74,7 +74,7 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
     }
 
     val pushResults =
-      localGitRepo.git.push.setCredentialsProvider(githubCredentials.git).setPushTags().setPushAll().call()
+      localGitRepo.git.push.setCredentialsProvider(githubCredentialsProvider().futureValue.git).setPushTags().setPushAll().call()
 
     forAll (pushResults.asScala) { pushResult =>
       all (pushResult.getRemoteUpdates.asScala.map(_.getStatus)) shouldBe RemoteRefUpdate.Status.OK
