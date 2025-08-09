@@ -21,8 +21,8 @@ import com.madgag.github.{AccessToken, Expirable}
 import scala.concurrent.{ExecutionContext, Future}
 
 class InstallationAccessTokenProvider(
-  githubAppAuth: GithubAppAuth,
-  installationId: String
+  githubAppAuth: GitHubAppAuth,
+  installationId: Long
 )(implicit ec: ExecutionContext)
   extends (() => Future[Expirable[AccessToken]]) {
 

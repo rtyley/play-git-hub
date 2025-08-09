@@ -17,6 +17,9 @@ import java.util.Date
 import scala.jdk.DurationConverters._
 import scala.util.{Try, Using}
 
+/**
+ * [[https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app]]
+ */
 class GitHubAppJWTs(
   appClientId: String,
   privateKey: PrivateKey
@@ -32,7 +35,7 @@ class GitHubAppJWTs(
     logger.info(s"Generating JWT: expiration=$expiration")
     Jwts.builder()
       .setIssuer(appClientId)
-      .setIssuedAt(Date.from(now.minusSeconds(60)))
+      .setIssuedAt(Date.from(now.minusSeconds(60))) // "To protect against clock drift, we recommend that you set this 60 seconds in the past"
       .setExpiration(Date.from(expiration))
       .signWith(privateKey, RS256)
       .compact()

@@ -179,7 +179,7 @@ trait CanList[T, ID] extends Reader[T] {
   def list(params: Map[String, String] = Map.empty)(implicit g: GitHub, ec: EC): Source[Seq[T],NotUsed] = {
     val initialUrl = HttpUrl.parse(link.listUrl).newBuilder()
     params.foreach { case (k, v) => initialUrl.addQueryParameter(k, v) }
-    g.followAndEnumerate(initialUrl.build())
+    g.followAndEnumerate[Seq[T]](initialUrl.build())
   }
 }
 
