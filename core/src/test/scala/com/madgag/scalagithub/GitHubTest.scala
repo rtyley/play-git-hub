@@ -18,6 +18,8 @@ package com.madgag.scalagithub
 
 import com.madgag.github.Implicits._
 import com.madgag.github.apps.GitHubAppAuth
+import com.madgag.scalagithub.GitHubCredentials.Provider
+import com.madgag.scalagithub.model.Account
 import org.apache.pekko.actor.ActorSystem
 import org.scalatest.OptionValues
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
@@ -27,9 +29,12 @@ import org.scalatest.matchers.should.Matchers
 import scala.concurrent.ExecutionContext.Implicits.global
 
 class GitHubTest extends AnyFlatSpec with Matchers with OptionValues with ScalaFutures with IntegrationPatience {
-  val gitHub: GitHub = new GitHub(
-    GitHubAppAuth.fromConfigMap(sys.env, prefix="PLAY_GIT_HUB_TEST").accessSoleInstallation().futureValue
-  )
+  private val (account, gitHubCredsProvider) =
+    GitHubAppAuth.fromConfigMap(sys.env, prefix = "PLAY_GIT_HUB_TEST").accessSoleInstallation().futureValue
+
+  println(s"Installation account: ${account.atLogin}")
+
+  val gitHub: GitHub = new GitHub(gitHubCredsProvider)
 
   it should "be able to make a request" in {
     gitHub.getUser("rtyley").futureValue.result.name.value should startWith("Roberto")
