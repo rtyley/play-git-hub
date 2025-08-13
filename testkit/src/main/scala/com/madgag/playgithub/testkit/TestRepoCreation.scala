@@ -19,13 +19,13 @@ package com.madgag.playgithub.testkit
 import com.madgag.git.RichRepo
 import com.madgag.git.test.unpackRepo
 import com.madgag.github.Implicits._
-import com.madgag.github.apps.InstallationAccess
+import com.madgag.scalagithub.GitHub
+import com.madgag.scalagithub.GitHubCredentials.Provider
 import com.madgag.scalagithub.commands.CreateRepo
 import com.madgag.scalagithub.model.{Account, Repo}
-import com.madgag.scalagithub.{GitHub, GitHubCredentials}
 import com.madgag.time.Implicits._
 import org.apache.pekko.actor.ActorSystem
-import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.api.{CloneCommand, Git}
 import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.scalatest.Inspectors.forAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
@@ -39,9 +39,10 @@ import scala.jdk.CollectionConverters._
 trait TestRepoCreation extends Eventually with ScalaFutures {
 
   val testRepoNamePrefix: String
-  val testFixturesInstallationAccess: InstallationAccess
-  lazy val testFixturesAccount: Account = testFixturesInstallationAccess.installedOnAccount
-  implicit lazy val github: GitHub = new GitHub(testFixturesInstallationAccess.credentials)
+  val testFixturesAccount: Account
+  val testFixturesCredentials: Provider
+
+  implicit lazy val github: GitHub = new GitHub(testFixturesCredentials)
   implicit val actorSystem: ActorSystem
 
   def isOldTestRepo(repo: Repo): Boolean =
@@ -74,8 +75,9 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
       localGitRepo.git.branchCreate().setName(defaultBranchName).setStartPoint("HEAD").call()
     }
 
+    val creds = testFixturesCredentials().futureValue
     val pushResults =
-      localGitRepo.git.push.setCredentialsProvider(testFixturesInstallationAccess.credentials().futureValue.git).setPushTags().setPushAll().call()
+      localGitRepo.git.push.setCredentialsProvider(creds.git).setPushTags().setPushAll().call()
 
     forAll (pushResults.asScala) { pushResult =>
       all (pushResult.getRemoteUpdates.asScala.map(_.getStatus)) shouldBe RemoteRefUpdate.Status.OK
@@ -86,8 +88,8 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
     }
 
     val clonedRepo = eventually {
-       Git.cloneRepository().setBare(true).setURI(testGithubRepo.clone_url)
-         .setDirectory(createTempDirectory("test-repo").toFile).call()
+      creds.applyAuthTo[CloneCommand, Git](Git.cloneRepository()).setBare(true).setURI(testGithubRepo.clone_url)
+        .setDirectory(createTempDirectory("test-repo").toFile).call()
     }
     require(clonedRepo.getRepository.findRef(defaultBranchName).getObjectId == localGitRepo.resolve("HEAD"))
 

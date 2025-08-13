@@ -46,6 +46,7 @@ case class RepoId(owner: String, name: String) {
 }
 
 case class Repo(
+  id: Long,
   name: String,
   url: String,
   full_name: String,

@@ -117,7 +117,9 @@ class GitHub(ghCredentials: GitHubCredentials.Provider) {
     val credsF = ghCredentials()
     for {
       creds <- credsF
-    } yield builder.addHeader("Authorization", s"token ${creds.accessToken.value}")
+    } yield builder.addHeader("Authorization", s"Bearer ${creds.accessToken.value}")
+//      .addHeader("Accept", "application/vnd.github+json")
+//      .addHeader("X-GitHub-Api-Version", "2022-11-28")
   }
 
   def executeAndWrap[T](settings: ReqMod)(processor: (Request, Response) => T)(implicit ec: EC): FR[T] = for {
@@ -302,7 +304,11 @@ class GitHub(ghCredentials: GitHubCredentials.Provider) {
   def getTeamMembership(teamId: Long, username: String)(implicit ec: EC): FR[Membership] =
     getAndCache(path("teams", teamId.toString, "memberships", username))
 
-  def getUser()(implicit ec: EC): Future[GitHubResponse[User]] = getAndCache(path("user"))
+  /**
+   * https://docs.github.com/en/rest/users/users?apiVersion=2022-11-28#get-the-authenticated-user
+   * GET /user
+   */
+  def getUser()(implicit ec: EC): FR[User] = getAndCache(path("user"))
 
   /**
    * https://docs.github.com/en/rest/users/users?apiVersion=2022-11-28#get-a-user
