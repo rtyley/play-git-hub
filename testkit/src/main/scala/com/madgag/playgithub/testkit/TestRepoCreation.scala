@@ -20,6 +20,7 @@ import com.madgag.git.RichRepo
 import com.madgag.git.test.unpackRepo
 import com.madgag.github.Implicits._
 import com.madgag.github.apps.InstallationAccess
+import com.madgag.scalagithub.GitHubCredentials.Provider
 import com.madgag.scalagithub.commands.CreateRepo
 import com.madgag.scalagithub.model.{Account, Repo}
 import com.madgag.scalagithub.{GitHub, GitHubCredentials}
@@ -39,9 +40,10 @@ import scala.jdk.CollectionConverters._
 trait TestRepoCreation extends Eventually with ScalaFutures {
 
   val testRepoNamePrefix: String
-  val testFixturesInstallationAccess: InstallationAccess
-  lazy val testFixturesAccount: Account = testFixturesInstallationAccess.installedOnAccount
-  implicit lazy val github: GitHub = new GitHub(testFixturesInstallationAccess.credentials)
+  val testFixturesAccount: Account
+  val testFixturesCredentials: Provider
+
+  implicit lazy val github: GitHub = new GitHub(testFixturesCredentials)
   implicit val actorSystem: ActorSystem
 
   def isOldTestRepo(repo: Repo): Boolean =
@@ -75,7 +77,7 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
     }
 
     val pushResults =
-      localGitRepo.git.push.setCredentialsProvider(testFixturesInstallationAccess.credentials().futureValue.git).setPushTags().setPushAll().call()
+      localGitRepo.git.push.setCredentialsProvider(testFixturesCredentials().futureValue.git).setPushTags().setPushAll().call()
 
     forAll (pushResults.asScala) { pushResult =>
       all (pushResult.getRemoteUpdates.asScala.map(_.getStatus)) shouldBe RemoteRefUpdate.Status.OK

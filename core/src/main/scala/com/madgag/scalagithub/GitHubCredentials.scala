@@ -46,6 +46,10 @@ case class GitHubCredentials(accessToken: AccessToken) {
 
 object GitHubCredentials {
   type Provider = () => Future[GitHubCredentials]
+
+  object Provider {
+    def fromStatic(accessToken: AccessToken): Provider = () => Future.successful(GitHubCredentials(accessToken))
+  }
 }
 
 object BearerAuthTransportConfig {
