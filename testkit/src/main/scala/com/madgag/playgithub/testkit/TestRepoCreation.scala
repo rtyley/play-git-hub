@@ -19,8 +19,9 @@ package com.madgag.playgithub.testkit
 import com.madgag.git.RichRepo
 import com.madgag.git.test.unpackRepo
 import com.madgag.github.Implicits._
+import com.madgag.github.apps.InstallationAccess
 import com.madgag.scalagithub.commands.CreateRepo
-import com.madgag.scalagithub.model.Repo
+import com.madgag.scalagithub.model.{Account, Repo}
 import com.madgag.scalagithub.{GitHub, GitHubCredentials}
 import com.madgag.time.Implicits._
 import org.apache.pekko.actor.ActorSystem
@@ -38,16 +39,16 @@ import scala.jdk.CollectionConverters._
 trait TestRepoCreation extends Eventually with ScalaFutures {
 
   val testRepoNamePrefix: String
-  val githubCredentialsProvider: GitHubCredentials.Provider
-  implicit lazy val github: GitHub = new GitHub(githubCredentialsProvider)
+  val testFixturesInstallationAccess: InstallationAccess
+  lazy val testFixturesAccount: Account = testFixturesInstallationAccess.installedOnAccount
+  implicit lazy val github: GitHub = new GitHub(testFixturesInstallationAccess.credentials)
   implicit val actorSystem: ActorSystem
-  val repoLifecycle: RepoLifecycle
 
   def isOldTestRepo(repo: Repo): Boolean =
     repo.name.startsWith(testRepoNamePrefix) && repo.created_at.toInstant.age() > ofMinutes(30)
 
   def deleteTestRepos()(implicit ec: ExecutionContext): Future[Unit] = for {
-    oldRepos <- repoLifecycle.listAllRepos()
+    oldRepos <- testFixturesAccount.listRepos().all()
     _ <- Future.traverse(oldRepos.filter(isOldTestRepo))(_.delete())
   } yield ()
 
@@ -57,7 +58,7 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
       `private` = false
     )
 
-    val testRepoId = repoLifecycle.createRepo(cr).futureValue.repoId
+    val testRepoId = testFixturesAccount.createRepo(cr).futureValue.repoId
 
     val localGitRepo = unpackRepo(fileName)
 
@@ -74,7 +75,7 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
     }
 
     val pushResults =
-      localGitRepo.git.push.setCredentialsProvider(githubCredentialsProvider().futureValue.git).setPushTags().setPushAll().call()
+      localGitRepo.git.push.setCredentialsProvider(testFixturesInstallationAccess.credentials().futureValue.git).setPushTags().setPushAll().call()
 
     forAll (pushResults.asScala) { pushResult =>
       all (pushResult.getRemoteUpdates.asScala.map(_.getStatus)) shouldBe RemoteRefUpdate.Status.OK
