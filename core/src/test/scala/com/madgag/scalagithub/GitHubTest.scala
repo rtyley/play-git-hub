@@ -19,7 +19,7 @@ package com.madgag.scalagithub
 import com.madgag.github.Implicits._
 import com.madgag.github.apps.{GitHubAppAuth, InstallationAccess}
 import com.madgag.scalagithub.GitHubCredentials.Provider
-import com.madgag.scalagithub.model.Account
+import com.madgag.scalagithub.model.{Account, RepoId}
 import org.apache.pekko.actor.ActorSystem
 import org.scalatest.OptionValues
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
@@ -38,6 +38,10 @@ class GitHubTest extends AnyFlatSpec with Matchers with OptionValues with ScalaF
 
   it should "be able to make a request" in {
     gitHub.getUser("rtyley").futureValue.result.name.value should startWith("Roberto")
+  }
+
+  it should "be able to get a public repo" in {
+    gitHub.getRepo(RepoId("rtyley", "bfg-repo-cleaner")).futureValue.result.id shouldBe 7266492
   }
 
   it should "be able to list repos accessible to the installation" in {
