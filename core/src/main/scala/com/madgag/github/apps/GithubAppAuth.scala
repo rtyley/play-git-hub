@@ -2,11 +2,11 @@ package com.madgag.github.apps
 
 import com.madgag.github.AccessToken
 import com.madgag.okhttpscala._
-import com.madgag.scalagithub.{GitHub, GitHubCredentials}
 import com.madgag.scalagithub.GitHub.{ReqMod, _}
-import com.madgag.scalagithub.model.{Account, GitHubApp}
-import okhttp3.OkHttpClient
+import com.madgag.scalagithub.GitHubCredentials
+import com.madgag.scalagithub.model.{Account, GitHubApp, Installation}
 import okhttp3.Request.Builder
+import okhttp3.{HttpUrl, OkHttpClient}
 import play.api.Logging
 import play.api.libs.json.{Json, Reads}
 
@@ -55,6 +55,8 @@ class GitHubAppAuth(jwts: GitHubAppJWTs) extends Logging {
     }
   }
 
+  def executeGet[T: Reads](url: HttpUrl)(implicit ec: ExecutionContext): Future[T] = request(_.url(url).get(), 200)
+
   /**
    * https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation#generating-an-installation-access-token
    * https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#create-an-installation-access-token-for-an-app
@@ -62,42 +64,47 @@ class GitHubAppAuth(jwts: GitHubAppJWTs) extends Logging {
   def getInstallationAccessToken(installationId: Long)(implicit ec: ExecutionContext): Future[InstallationTokenResponse] =
     request[InstallationTokenResponse](_.url(path("app", "installations", installationId.toString, "access_tokens")).post(EmptyRequestBody), 201)
 
-  def accessInstallation(installationId: Long)(implicit ec: ExecutionContext): GitHubCredentials.Provider =
-    new AccessToken.Cache(new InstallationAccessTokenProvider(this, installationId))
-
-  def accessInstallations()(implicit ec: ExecutionContext):Future[Map[Long, (Account, GitHubCredentials.Provider)]] = for {
-    installations <- getInstallations()
-  } yield (for {
-    installation <- installations
-  } yield installation.id -> (installation.account, accessInstallation(installation.id))).toMap
-
-  def accessSoleInstallation(installationId: Option[Long] = None)(implicit ec: ExecutionContext): Future[GitHubCredentials.Provider] =
-    installationId.fold(for {
-      installations <- accessInstallations()
-    } yield {
-      require(installations.size == 1, s"Found ${installations.size} installations of this GitHub App, should be precisely ONE.")
-      installations.head._2._2
-    }
-  )(id => Future.successful(accessInstallation(id)))
-
   /**
-   * https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#get-the-authenticated-app
+   * [[https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#get-the-authenticated-app]]
    */
-  def getAuthenticatedApp()(implicit ec: ExecutionContext): Future[GitHubApp] =
-    request[GitHubApp](_.url(path("app")).get(), 200)
+  def getAuthenticatedApp()(implicit ec: ExecutionContext): Future[GitHubApp] = executeGet[GitHubApp](path("app"))
 
   /**
-   * https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#list-installations-for-the-authenticated-app
+   * [[https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#get-an-installation-for-the-authenticated-app]]
+   *
+   * GET /app/installations/{installation_id}
+   */
+  def getInstallation(installationId: Long)(implicit ec: ExecutionContext): Future[Installation] =
+    executeGet[Installation](path("app", "installations", installationId.toString))
+
+  /**
+   * [[https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#list-installations-for-the-authenticated-app]]
    */
   def getInstallations()(implicit ec: ExecutionContext): Future[Seq[Installation]] =
-    request[Seq[Installation]](_.url(path("app", "installations")).get(), 200)
+    executeGet[Seq[Installation]](path("app", "installations"))
+
+  def getSoleInstallation(installationId: Option[Long] = None)(implicit ec: ExecutionContext): Future[Installation] =
+    installationId.fold(for {
+      installations <- getInstallations()
+    } yield {
+      require(installations.size == 1, s"Found ${installations.size} installations of this GitHub App, should be precisely ONE.")
+      installations.head
+    })(getInstallation)
+
+  def accessSoleInstallation(installationId: Option[Long] = None)(implicit ec: ExecutionContext): Future[InstallationAccess] = for {
+    installation <- getSoleInstallation(installationId)
+  } yield InstallationAccess(
+    installation,
+    new AccessToken.Cache(new InstallationAccessTokenProvider(this, installation.id))
+  )
 
 }
 
-case class Installation(id: Long, account: Account)
-
-object Installation {
-  implicit val reads: Reads[Installation] = Json.reads
+case class InstallationAccess(
+  installation: Installation,
+  credentials: GitHubCredentials.Provider
+) {
+  val installedOnAccount: Account = installation.account
 }
 
 case class InstallationTokenResponse(

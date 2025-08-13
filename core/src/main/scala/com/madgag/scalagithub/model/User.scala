@@ -16,12 +16,14 @@
 
 package com.madgag.scalagithub.model
 
-import java.time.ZonedDateTime
-
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub._
-import play.api.libs.json.{Reads, Json}
+import com.madgag.scalagithub.commands.CreateRepo
+import org.apache.pekko.NotUsed
+import org.apache.pekko.stream.scaladsl.Source
+import play.api.libs.json.{Json, Reads}
 
+import java.time.ZonedDateTime
 import scala.concurrent.{ExecutionContext => EC}
 
 case class User(
@@ -34,6 +36,11 @@ case class User(
   created_at: Option[ZonedDateTime] = None
 ) extends Account {
   override type Self = User
+
+  override def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: EC): FR[Repo] = github.createRepo(cr)
+
+  override def listRepos()(implicit github: GitHub, ec: EC): Source[Seq[Repo], NotUsed] =
+    github.listRepos("updated", "desc")
 }
 
 object User {

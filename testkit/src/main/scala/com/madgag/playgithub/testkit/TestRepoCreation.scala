@@ -20,7 +20,7 @@ import com.madgag.git.RichRepo
 import com.madgag.git.test.unpackRepo
 import com.madgag.github.Implicits._
 import com.madgag.scalagithub.commands.CreateRepo
-import com.madgag.scalagithub.model.Repo
+import com.madgag.scalagithub.model.{Account, Repo}
 import com.madgag.scalagithub.{GitHub, GitHubCredentials}
 import com.madgag.time.Implicits._
 import org.apache.pekko.actor.ActorSystem
@@ -39,15 +39,16 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
 
   val testRepoNamePrefix: String
   val githubCredentialsProvider: GitHubCredentials.Provider
+  val testFixturesAccount: Account
   implicit lazy val github: GitHub = new GitHub(githubCredentialsProvider)
   implicit val actorSystem: ActorSystem
-  val repoLifecycle: RepoLifecycle
+
 
   def isOldTestRepo(repo: Repo): Boolean =
     repo.name.startsWith(testRepoNamePrefix) && repo.created_at.toInstant.age() > ofMinutes(30)
 
   def deleteTestRepos()(implicit ec: ExecutionContext): Future[Unit] = for {
-    oldRepos <- repoLifecycle.listAllRepos()
+    oldRepos <- testFixturesAccount.listRepos().all()
     _ <- Future.traverse(oldRepos.filter(isOldTestRepo))(_.delete())
   } yield ()
 
@@ -57,7 +58,7 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
       `private` = false
     )
 
-    val testRepoId = repoLifecycle.createRepo(cr).futureValue.repoId
+    val testRepoId = testFixturesAccount.createRepo(cr).futureValue.repoId
 
     val localGitRepo = unpackRepo(fileName)
 
