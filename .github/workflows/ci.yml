@@ -17,6 +17,10 @@ jobs:
       - uses: guardian/setup-scala@v1
       - name: Build and Test
         run: sbt -v +test
+        env:
+          PLAY_GIT_HUB_TEST_GITHUB_ACCESS_TOKEN: ${{ secrets.PLAY_GIT_HUB_TEST_GITHUB_ACCESS_TOKEN }}
+          PLAY_GIT_HUB_TEST_GITHUB_APP_CLIENT_ID: ${{ secrets.PLAY_GIT_HUB_TEST_GITHUB_APP_CLIENT_ID }}
+          PLAY_GIT_HUB_TEST_GITHUB_APP_PRIVATE_KEY: ${{ secrets.PLAY_GIT_HUB_TEST_GITHUB_APP_PRIVATE_KEY }}
       - name: Test Summary
         uses: test-summary/action@v2
         with:

@@ -16,14 +16,14 @@
 
 package com.madgag.scalagithub.model
 
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, Reads}
 
 object Membership {
-  implicit val readsMembership = Json.reads[Membership]
+  implicit val readsMembership: Reads[Membership] = Json.reads[Membership]
 }
 
 case class Membership(
-                       url: String,
-                       state: String,
-                       role: String
-                     )
+ url: String,
+ state: String,
+ role: String
+)

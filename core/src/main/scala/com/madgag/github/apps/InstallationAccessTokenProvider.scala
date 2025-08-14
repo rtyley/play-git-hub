@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Roberto Tyley
+ * Copyright 2025 Roberto Tyley
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,19 @@
  * limitations under the License.
  */
 
-package com.madgag.scalagithub.commands
+package com.madgag.github.apps
 
-import org.eclipse.jgit.lib.ObjectId
-import play.api.libs.json.{Json, OWrites}
-import com.madgag.scalagithub._
+import com.madgag.github.{AccessToken, Expirable}
 
-case class MergePullRequest(
-  commit_message: Option[String] = None,
-  sha: Option[ObjectId] = None
-)
+import scala.concurrent.{ExecutionContext, Future}
 
-object MergePullRequest {
-  implicit val writesMergePullRequest: OWrites[MergePullRequest] = Json.writes[MergePullRequest]
+class InstallationAccessTokenProvider(
+  githubAppAuth: GitHubAppAuth,
+  installationId: Long
+)(implicit ec: ExecutionContext)
+  extends (() => Future[Expirable[AccessToken]]) {
+
+  override def apply(): Future[Expirable[AccessToken]] =
+    githubAppAuth.getInstallationAccessToken(installationId).map(resp => Expirable(resp.token, resp.expires_at))
+
 }

@@ -16,14 +16,16 @@
 
 package com.madgag.scalagithub.model
 
-import java.time.ZonedDateTime
-
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.FR
-import okhttp3.Request.Builder
+import com.madgag.scalagithub.commands.CreateRepo
+import okhttp3.HttpUrl
+import org.apache.pekko.NotUsed
+import org.apache.pekko.stream.scaladsl.Source
 import play.api.libs.json.Reads
 
-import scala.concurrent.{ExecutionContext => EC}
+import java.time.ZonedDateTime
+import scala.concurrent.{ExecutionContext, ExecutionContext => EC}
 
 trait Account {
   type Self <: Account
@@ -37,10 +39,15 @@ trait Account {
 
   val atLogin = s"@$login"
 
-  lazy val displayName = name.filter(_.nonEmpty).getOrElse(atLogin)
+  lazy val displayName: String = name.filter(_.nonEmpty).getOrElse(atLogin)
 
-  def reFetch()(implicit g: GitHub, ec: EC, ev: Reads[Self]): FR[Self]  = {
-    g.executeAndReadJson[Self](g.addAuthAndCaching(new Builder().url(url)))
-  }
+  def reFetch()(implicit g: GitHub, ec: EC, ev: Reads[Self]): FR[Self]  = g.getAndCache[Self](HttpUrl.get(url))
 
+  def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: ExecutionContext): FR[Repo]
+
+  def listRepos()(implicit github: GitHub, ec: ExecutionContext): Source[Seq[Repo], NotUsed]
+}
+
+object Account {
+  implicit val reads: Reads[Account] = Org.readsUser.widen[Account].orElse(User.readsUser.widen[Account])
 }

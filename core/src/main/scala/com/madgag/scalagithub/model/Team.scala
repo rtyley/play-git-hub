@@ -53,10 +53,10 @@ object Team {
   case class Org(login: String, id: Long, url: String, avatar_url: String, description: Option[String])
 
   object Org {
-    implicit val readsOrg = Json.reads[Org]
+    implicit val readsOrg: Reads[Org] = Json.reads[Org]
   }
 
-  implicit val readsTeam = Json.reads[Team]
+  implicit val readsTeam: Reads[Team] = Json.reads[Team]
 
 }
 

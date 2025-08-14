@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Roberto Tyley
+ * Copyright 2025 Roberto Tyley
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,12 @@
  * limitations under the License.
  */
 
-package com.madgag.scalagithub.commands
+package com.madgag.scalagithub.model
 
-import org.eclipse.jgit.lib.ObjectId
-import play.api.libs.json.{Json, OWrites}
-import com.madgag.scalagithub._
+import play.api.libs.json.{Json, Reads}
 
-case class MergePullRequest(
-  commit_message: Option[String] = None,
-  sha: Option[ObjectId] = None
-)
+case class Installation(id: Long, account: Account)
 
-object MergePullRequest {
-  implicit val writesMergePullRequest: OWrites[MergePullRequest] = Json.writes[MergePullRequest]
+object Installation {
+  implicit val reads: Reads[Installation] = Json.reads
 }

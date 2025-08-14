@@ -16,13 +16,15 @@
 
 package com.madgag.scalagithub.model
 
-import java.time.ZonedDateTime
-
 import com.madgag.scalagithub.GitHub
-import com.madgag.scalagithub.commands.CreateFile
-import okhttp3.HttpUrl
-import play.api.libs.json.{Reads, Writes, Json}
-import GitHub._
+import com.madgag.scalagithub.GitHub._
+import com.madgag.scalagithub.commands.CreateRepo
+import org.apache.pekko.NotUsed
+import org.apache.pekko.stream.scaladsl.Source
+import play.api.libs.json.{Json, Reads}
+
+import java.time.ZonedDateTime
+import scala.concurrent.ExecutionContext
 
 /*
 https://developer.github.com/v3/orgs/#get-an-organization
@@ -68,9 +70,9 @@ case class Org(
 
   private def userField(suffix: String) =
     new CanList[User, String] with CanCheck[String] with CanDelete[String] {
-    override val link: Link[String] = Link.fromListUrl(s"$url/$suffix")
-    override implicit val readsT: Reads[User] = User.readsUser
-  }
+      override val link: Link[String] = Link.fromListUrl(s"$url/$suffix")
+      override implicit val readsT: Reads[User] = User.readsUser
+    }
 
   // GET /orgs/:org/members
   // GET /orgs/:org/members/:username
@@ -79,8 +81,14 @@ case class Org(
   // GET /orgs/:org/public_members
   // GET /orgs/:org/public_members/:username
   val publicMembers = userField("public_members")
+
+  override def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: ExecutionContext): FR[Repo] =
+    github.createOrgRepo(login, cr)
+
+  override def listRepos()(implicit github: GitHub, ec: ExecutionContext): Source[Seq[Repo], NotUsed] =
+    github.listOrgRepos(login,"updated", "desc")
 }
 
 object Org {
-  implicit val readsUser = Json.reads[Org]
+  implicit val readsUser: Reads[Org] = Json.reads[Org]
 }

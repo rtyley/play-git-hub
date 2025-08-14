@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Roberto Tyley
+ * Copyright 2025 Roberto Tyley
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,33 +16,18 @@
 
 package com.madgag.scalagithub.model
 
-import com.madgag.scalagithub.GitHub
-import com.madgag.scalagithub.GitHub._
-import com.madgag.scalagithub.commands.CreateRepo
-import org.apache.pekko.NotUsed
-import org.apache.pekko.stream.scaladsl.Source
 import play.api.libs.json.{Json, Reads}
 
 import java.time.ZonedDateTime
-import scala.concurrent.{ExecutionContext => EC}
 
-case class User(
-  login: String,
+case class GitHubApp(
+  slug: String,
   id: Long,
-  avatar_url: String,
-  url: String,
   html_url: String,
   name: Option[String] = None,
   created_at: Option[ZonedDateTime] = None
-) extends Account {
-  override type Self = User
+)
 
-  override def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: EC): FR[Repo] = github.createRepo(cr)
-
-  override def listRepos()(implicit github: GitHub, ec: EC): Source[Seq[Repo], NotUsed] =
-    github.listRepos("updated", "desc")
-}
-
-object User {
-  implicit val readsUser: Reads[User] = Json.reads[User]
+object GitHubApp {
+  implicit val readsGitHubApp: Reads[GitHubApp] = Json.reads[GitHubApp]
 }

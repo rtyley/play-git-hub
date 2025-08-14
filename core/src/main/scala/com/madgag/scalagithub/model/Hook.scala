@@ -16,7 +16,7 @@
 
 package com.madgag.scalagithub.model
 
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, Reads}
 
 /*
 {
@@ -46,5 +46,5 @@ case class Hook(
 ) extends Deletable // https://developer.github.com/v3/repos/hooks/#delete-a-hook
 
 object Hook {
-  implicit val readsHook = Json.reads[Hook]
+  implicit val readsHook: Reads[Hook] = Json.reads[Hook]
 }

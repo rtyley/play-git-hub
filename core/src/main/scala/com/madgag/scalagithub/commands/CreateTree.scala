@@ -18,7 +18,7 @@ package com.madgag.scalagithub.commands
 
 import com.madgag.scalagithub._
 import org.eclipse.jgit.lib.ObjectId
-import play.api.libs.json.Json
+import play.api.libs.json.{Json, OWrites}
 
 /*
 {
@@ -48,9 +48,9 @@ object CreateTree {
   )
 
   object Entry {
-    implicit val writesEntry = Json.writes[Entry]
+    implicit val writesEntry: OWrites[Entry] = Json.writes[Entry]
   }
 
-  implicit val writesCreateTree = Json.writes[CreateTree]
+  implicit val writesCreateTree: OWrites[CreateTree] = Json.writes[CreateTree]
 }
 

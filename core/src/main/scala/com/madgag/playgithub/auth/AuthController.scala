@@ -25,6 +25,7 @@ import play.api.libs.json.Json
 import play.api.mvc._
 
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 trait AuthController extends BaseController {
 
@@ -47,7 +48,7 @@ trait AuthController extends BaseController {
       accessToken <- client.execute(accessTokenRequest) { response =>
         Json.parse(response.body.byteStream()).validate[GitHubAuthResponse].get.access_token
       }
-      userResponse <- new GitHub(GitHubCredentials(accessToken, new OkHttpClient)).getUser()
+      userResponse <- new GitHub(() => Future.successful(GitHubCredentials(com.madgag.github.AccessToken(accessToken)))).getUser()
     } yield {
       val user = userResponse.result
       Redirect(req.session.get(AuthenticatedSessions.RedirectToPathAfterAuthKey).getOrElse(defaultPage)).withSession(
