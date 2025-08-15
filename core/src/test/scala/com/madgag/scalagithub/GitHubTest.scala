@@ -27,7 +27,6 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.time.Instant
-import scala.math.Ordering.Implicits._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 class GitHubTest extends AnyFlatSpec with Matchers with OptionValues with ScalaFutures with IntegrationPatience {
@@ -38,7 +37,7 @@ class GitHubTest extends AnyFlatSpec with Matchers with OptionValues with ScalaF
 
     println(s"Installation account: ${installationAccess.installedOnAccount.atLogin}")
 
-    val appGitHub: GitHub = new GitHub(installationAccess.credentials)
+    implicit val appGitHub: GitHub = new GitHub(installationAccess.credentials)
 
     it should "be able to make a request" in {
       appGitHub.getUser("rtyley").futureValue.result.name.value should startWith("Roberto")
@@ -46,6 +45,24 @@ class GitHubTest extends AnyFlatSpec with Matchers with OptionValues with ScalaF
 
     it should "be able to get a public repo" in {
       appGitHub.getRepo(RepoId("rtyley", "bfg-repo-cleaner")).futureValue.result.id shouldBe 7266492
+    }
+
+    it should "be able get the 'merged' state of a repo" in {
+      val repo = appGitHub.getRepo(RepoId("rtyley", "play-git-hub")).futureValue.result
+      val mergedPr = repo.pullRequests.get(2).futureValue.result
+      mergedPr.merged.value shouldBe true
+      mergedPr.merged_by.value.login shouldBe "rtyley"
+
+      val unmergedPr = repo.pullRequests.get(16).futureValue.result
+      unmergedPr.merged.value shouldBe false
+      unmergedPr.merged_by shouldBe None
+    }
+
+    it should "be able list PRs" in {
+      val repo = appGitHub.getRepo(RepoId("rtyley", "play-git-hub")).futureValue.result
+      implicit val as: ActorSystem = ActorSystem.create()
+      val prs = repo.pullRequests.list(Map("state" -> "closed")).all()
+      prs.futureValue.size should be > 2
     }
 
     it should "be able to list repos accessible to the installation" in {
