@@ -5,6 +5,8 @@ _A common library of Play/Scala code for creating GitHub-related webapps_
 [![core Scala version support](https://index.scala-lang.org/rtyley/play-git-hub/core/latest-by-scala-version.svg?platform=jvm)](https://index.scala-lang.org/rtyley/play-git-hub/core)
 [![Release](https://github.com/rtyley/play-git-hub/actions/workflows/release.yml/badge.svg)](https://github.com/rtyley/play-git-hub/actions/workflows/release.yml)
 
+DO NOT MERGE THIS
+
 Used in:
 
 * [_gu:who?_](https://www.theguardian.com/info/developer-blog/2014/apr/11/how-the-guardian-uses-github-to-audit-github) -
