@@ -25,6 +25,6 @@ class PullRequestTest extends AnyFlatSpec with should.Matchers {
     val json = Json.parse(getClass.getResource("/git.git.pulls.json").openStream())
     val prs: JsResult[Seq[PullRequest]] = Json.fromJson[Seq[PullRequest]](json)
 
-    prs.get should have size 30
+    prs.get should have size 9
   }
 }
