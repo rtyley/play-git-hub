@@ -17,18 +17,18 @@
 package com.madgag.rfc5988link
 
 import com.madgag.rfc5988link.LinkParser.linkValues
-import fastparse._
-import okhttp3.HttpUrl
+import fastparse.*
 import org.scalatest.Inside
-import org.scalatest.flatspec._
-import org.scalatest.matchers._
+import org.scalatest.flatspec.*
+import org.scalatest.matchers.*
+import sttp.client4.*
 
 class LinkParserTest extends AnyFlatSpec with should.Matchers with Inside {
   "FastParse" should "parse examples from RFC 5988 Section 5.5" in {
     inside(parse("<http://example.com/TheBook/chapter2>; rel=\"previous\"; title=\"previous chapter\"", linkValues(_))) {
       case Parsed.Success(value, _) =>
         value should contain only LinkTarget(
-          HttpUrl.parse("http://example.com/TheBook/chapter2"),
+          uri"http://example.com/TheBook/chapter2",
           Seq(
             "rel" -> "previous",
             "title" -> "previous chapter"
@@ -42,11 +42,11 @@ class LinkParserTest extends AnyFlatSpec with should.Matchers with Inside {
       case Parsed.Success(value, _) =>
         value should contain inOrderOnly(
           LinkTarget(
-            HttpUrl.parse("https://api.github.com/user/52038/repos?page=2"),
+            uri"https://api.github.com/user/52038/repos?page=2",
             Seq("rel" -> "next")
           ),
           LinkTarget(
-            HttpUrl.parse("https://api.github.com/user/52038/repos?page=4"),
+            uri"https://api.github.com/user/52038/repos?page=4",
             Seq("rel" -> "last")
           )
         )

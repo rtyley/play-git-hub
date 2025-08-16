@@ -11,10 +11,10 @@ import play.api.Logging
 import java.io.StringReader
 import java.security.PrivateKey
 import java.time.Clock.systemUTC
-import java.time.Duration.ofMinutes
+import java.time.Duration.{ofMinutes, ofSeconds}
 import java.time.{Clock, Duration}
 import java.util.Date
-import scala.jdk.DurationConverters._
+import scala.jdk.DurationConverters.*
 import scala.util.{Try, Using}
 
 /**
@@ -25,14 +25,15 @@ class GitHubAppJWTs(
   privateKey: PrivateKey
 ) extends Logging {
   private val cache: LoadingCache[Unit, String] = Scaffeine()
-    .expireAfterWrite(CacheLifeTime.toScala)
+    .refreshAfterWrite(CacheLifeTime.toScala) // https://github.com/ben-manes/caffeine/wiki/Refresh
+    .expireAfterWrite(MaxLifeTime.toScala)
     .maximumSize(1)
     .build(_ => generate())
 
   private def generate()(implicit clock: Clock = systemUTC()): String = {
     val now = clock.instant()
     val expiration = now.plus(MaxLifeTime)
-    logger.info(s"Generating JWT: expiration=$expiration")
+    println(s"Generating JWT: expiration=$expiration")
     Jwts.builder()
       .setIssuer(appClientId)
       .setIssuedAt(Date.from(now.minusSeconds(60))) // "To protect against clock drift, we recommend that you set this 60 seconds in the past"
@@ -47,7 +48,7 @@ class GitHubAppJWTs(
 object GitHubAppJWTs {
   val MaxLifeTime: Duration = ofMinutes(10) // https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app
 
-  val CacheLifeTime: Duration = MaxLifeTime.multipliedBy(9).dividedBy(10) // Avoid race-condition near expiry
+  val CacheLifeTime: Duration = MaxLifeTime.multipliedBy(9).dividedBy(10) // Avoid race near expiry
 
   def parsePrivateKeyFrom(privateKeyPem: String): Try[PrivateKey] = {
     val converter = new JcaPEMKeyConverter()
@@ -55,5 +56,20 @@ object GitHubAppJWTs {
       val keyObject = pemParser.readObject()
       converter.getPrivateKey(keyObject.asInstanceOf[PEMKeyPair].getPrivateKeyInfo)
     }
+  }
+
+  /**
+   * For a prefix 'FOO', the config will be loaded from two keys:
+   * - FOO_GITHUB_APP_CLIENT_ID - https://github.blog/changelog/2024-05-01-github-apps-can-now-use-the-client-id-to-fetch-installation-tokens/
+   * - FOO_GITHUB_APP_PRIVATE_KEY
+   */
+  def fromConfigMap(configMap: Map[String, String], prefix: String): GitHubAppJWTs = {
+    def getValue(suffix: String): String = {
+      val keyName = s"${prefix}_GITHUB_APP_$suffix"
+      require(configMap.contains(keyName), s"Missing config '$keyName'")
+      configMap(keyName)
+    }
+
+    new GitHubAppJWTs(getValue("CLIENT_ID"), GitHubAppJWTs.parsePrivateKeyFrom(getValue("PRIVATE_KEY")).get)
   }
 }

@@ -19,27 +19,25 @@ package com.madgag.scalagithub
 import com.madgag.ratelimitstatus.{QuotaUpdate, RateLimit}
 import com.madgag.rfc5988link.{LinkParser, LinkTarget}
 import fastparse.parse
-import okhttp3._
 import play.api.http.Status.NOT_MODIFIED
+import sttp.model.{HasHeaders, Header, Uri}
 
 import java.time.Duration.ofHours
 import java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME
 import java.time.{Instant, ZonedDateTime}
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 import scala.language.implicitConversions
 
 object ResponseMeta {
+  
   val GitHubRateLimit: RateLimit = RateLimit(ofHours(1))
 
-  implicit class RichHeaders(headers: Headers) {
-    def getOpt(name: String): Option[String] = Option(headers.get(name))
-  }
-
-  def rateLimitStatusFrom(headers: Headers): Option[RateLimit.Status] = for {
-    remaining <- headers.getOpt("X-RateLimit-Remaining")
-    limit <- headers.getOpt("X-RateLimit-Limit")
-    reset <- headers.getOpt("X-RateLimit-Reset")
-    date <- headers.getOpt("Date")
+  def rateLimitStatusFrom(headers: HasHeaders): Option[RateLimit.Status] = for {
+    remaining <- headers.header("X-RateLimit-Remaining")
+    limit <- headers.header("X-RateLimit-Limit")
+    reset <- headers.header("X-RateLimit-Reset")
+    date <- headers.header("Date")
   } yield GitHubRateLimit.statusFor(QuotaUpdate(
     remaining = remaining.toInt,
     limit = limit.toInt,
@@ -47,16 +45,13 @@ object ResponseMeta {
     capturedAt = ZonedDateTime.parse(date, RFC_1123_DATE_TIME).toInstant
   ))
 
-  def rateLimitFrom(response: Response): Quota = {
-    val networkResponse = Option(response.networkResponse())
-    Quota(
-      consumed = if (networkResponse.exists(_.code != NOT_MODIFIED)) 1 else 0,
-      networkResponse.flatMap(resp => rateLimitStatusFrom(resp.headers))
-    )
-  }
+  def rateLimitFrom(notModified: Boolean, headers: Option[HasHeaders]): Quota = Quota(
+    consumed = if (notModified) 1 else 0,
+    headers.flatMap(rateLimitStatusFrom)
+  )
 
-  def requestScopesFrom(response: Response): Option[RequestScopes] = {
-    def scopes(h: String): Option[Set[String]] = Option(response.header(h)).map(_.split(',').map(_.trim).toSet)
+  def requestScopesFrom(headers: HasHeaders): Option[RequestScopes] = {
+    def scopes(h: String): Option[Set[String]] = headers.header(h).map(_.split(',').map(_.trim).toSet)
 
     for {
       oAuthScopes <- scopes("X-OAuth-Scopes")
@@ -64,15 +59,18 @@ object ResponseMeta {
     } yield RequestScopes(oAuthScopes, acceptedOAuthScopes)
   }
 
-  def linksFrom(response: Response): Seq[LinkTarget] = for {
-    linkHeader <- response.headers("Link").asScala.toSeq
-    linkTargets <- parse(linkHeader, LinkParser.linkValues(_)).get.value
-  } yield linkTargets
-
-  def from(resp: Response) =
-    ResponseMeta(rateLimitFrom(resp), requestScopesFrom(resp), linksFrom(resp))
+  def linksFrom(headers: HasHeaders): Seq[LinkTarget] =
+    headers.headers("Link").flatMap(parse(_, LinkParser.linkValues(_)).get.value)
+  
+  def from(resp: sttp.client4.Response[_]) = ResponseMeta(
+    rateLimitFrom(resp.code.code == NOT_MODIFIED, Some(resp)),
+    requestScopesFrom(resp),
+    linksFrom(resp)
+  )
 }
 
 case class ResponseMeta(quota: Quota, requestScopes: Option[RequestScopes], links: Seq[LinkTarget]) {
-  val nextOpt: Option[HttpUrl] = links.find(_.relOpt.contains("next")).map(_.url)
+  val nextOpt: Option[Uri] = links.find(_.relOpt.contains("next")).map(_.uri)
 }
+
+case class StoredMeta(nextOpt: Option[Uri])

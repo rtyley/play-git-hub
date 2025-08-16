@@ -16,7 +16,7 @@
 
 package com.madgag.playgithub
 
-import com.madgag.scalagithub.model.{PullRequestId, RepoId}
+import com.madgag.scalagithub.model.{PullRequest, RepoId}
 import org.eclipse.jgit.lib.ObjectId
 import play.api.mvc.PathBindable.Parsing
 
@@ -36,7 +36,7 @@ object Binders {
   /*
    * e.g.GET  /$pr<[^/]+/[^/]+/pull/[\d]+>  controllers.Application.reviewPullRequest(pr: PullRequestId)
    */
-  implicit object bindablePullRequestId extends Parsing[PullRequestId](
-    PullRequestId.from, _.slug, (key: String, e: Exception) => s"Cannot parse pull request '$key'"
+  implicit object bindablePullRequestId extends Parsing[PullRequest.Id](
+    PullRequest.Id.from, _.slug, (key: String, e: Exception) => s"Cannot parse pull request '$key'"
   )
 }

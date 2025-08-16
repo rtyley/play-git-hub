@@ -16,18 +16,18 @@
 
 package com.madgag.scalagithub.model
 
+import sttp.client4.*
+import sttp.model.Uri
+import com.madgag.scalagithub.GitHub
+import com.madgag.scalagithub.GitHub.{FR, ListStream}
+import com.madgag.scalagithub.commands.*
 import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.scaladsl.Source
-import com.madgag.scalagithub.GitHub
-import com.madgag.scalagithub.GitHub.{FR, RichOkHttpBuilder}
-import com.madgag.scalagithub.commands._
-import okhttp3.HttpUrl
-import okhttp3.Request.Builder
-import play.api.libs.json.Json._
 import play.api.libs.json.{Json, Reads, Writes}
 
 import java.time.ZonedDateTime
-import scala.concurrent.{ExecutionContext => EC}
+import scala.concurrent.ExecutionContext as EC
+import org.eclipse.jgit
 
 object RepoId {
   def from(fullName: String) = {
@@ -45,6 +45,12 @@ case class RepoId(owner: String, name: String) {
   lazy val fullName = s"$owner/$name"
 }
 
+class RepoRefs(git_refs_url: String) extends CCreator[Ref, String, CreateRef](Link.fromSuffixedUrl(git_refs_url, "/sha"))
+  with CanGetAndList[Ref, String] {
+
+  def get(ref: jgit.lib.Ref)(using GitHub): FR[Ref] = get(ref.getName.stripPrefix("refs/"))
+}
+
 case class Repo(
   id: Long,
   name: String,
@@ -60,6 +66,7 @@ case class Repo(
   pulls_url: String,
   commits_url: String,
   contents_url: String,
+  git_tags_url: String,
   trees_url: String,
   default_branch: String,
   `private`: Boolean,
@@ -77,10 +84,12 @@ case class Repo(
 
   val trees2 = new Repo.Trees(trees)
 
-  val refs = new CCreator[Ref, String, CreateRef](Link.fromSuffixedUrl(git_refs_url, "/sha"))
-    with CanGetAndList[Ref, String]
+  val refs = new RepoRefs(git_refs_url)
   // https://developer.github.com/v3/git/refs/#get-a-reference
   // https://developer.github.com/v3/git/refs/#create-a-reference
+
+  val tags = new CCreator[Tag, String, Tag.Create](Link.fromSuffixedUrl[String](git_tags_url, "/sha"))
+    with CanGet[Tag, String]
 
   val pullRequests = new CCreator[PullRequest, Int, CreatePullRequest](Link.fromSuffixedUrl(pulls_url, "/number"))
     with CanGetAndList[PullRequest, Int]
@@ -123,11 +132,11 @@ case class Repo(
   // https://developer.github.com/v3/issues/labels/#get-a-single-label
   // https://developer.github.com/v3/issues/labels/#create-a-label
 
-  def combinedStatusFor(ref: String)(implicit g: GitHub, ec: EC): FR[CombinedStatus] =
-    g.getAndCache(HttpUrl.get(commits.urlFor(ref) + "/status"))
+  def combinedStatusFor(ref: String)(using g: GitHub): FR[CombinedStatus] =
+    g.gitHubHttp.getAndCache(commits.urlFor(ref).addPath("status"))
 
-  def statusesFor(ref: String)(implicit g: GitHub, ec: EC): FR[Seq[Status]] =
-    g.getAndCache(HttpUrl.get(commits.urlFor(ref) + "/statuses"))
+  def statusesFor(ref: String)(using g: GitHub): FR[Seq[Status]] =
+    g.gitHubHttp.getAndCache(commits.urlFor(ref).addPath("statuses"))
 
   val settingsUrl = s"$html_url/settings"
 
@@ -136,8 +145,6 @@ case class Repo(
   // lazy way of constructing https://github.com/submitgit/pretend-git/compare/7c597ef345aed345576de616c51f27e6f4b342b3...f90334356a304bc0acad01ab4fc64c49a3afd371
   def compareUrl(base: String, head: String) = s"$html_url/compare/$base...$head"
 }
-
-import com.madgag.scalagithub.GitHub._
 
 trait Reader[T] {
   implicit val readsT: Reads[T]
@@ -162,49 +169,45 @@ trait CanCreate[T, ID, CC] extends Writer[T, CC] {
 
   val link: Link[ID]
 
-  def create(cc: CC)(implicit g: GitHub, ec: EC): FR[T] = g.create(HttpUrl.get(link.listUrl), cc)
+  def create(cc: CC)(using g: GitHub): FR[T] = g.create(Uri.unsafeParse(link.listUrl), cc)
 }
 
 trait CanPut[T, ID, CC] extends Writer[T, CC] {
 
   val link: Link[ID]
 
-  def put(id: ID, cc: CC)(implicit g: GitHub, ec: EC): FR[T] =
-    g.put[CC, T](HttpUrl.get(link.urlFor(id)), cc)
+  def put(id: ID, cc: CC)(using g: GitHub): FR[T] = g.put[CC, T](link.urlFor(id), cc)
 }
 
 trait CanList[T, ID] extends Reader[T] {
 
   val link: Link[ID]
 
-  def list(params: Map[String, String] = Map.empty)(implicit g: GitHub, ec: EC): Source[Seq[T],NotUsed] = {
-    val initialUrl = HttpUrl.parse(link.listUrl).newBuilder()
-    params.foreach { case (k, v) => initialUrl.addQueryParameter(k, v) }
-    g.followAndEnumerate[Seq[T]](initialUrl.build())
-  }
+  def list(params: Map[String, String] = Map.empty)(implicit g: GitHub, ec: EC): ListStream[T] =
+    g.followAndEnumerate(Uri.unsafeParse(link.listUrl).addParams(params))
 }
 
 trait CanGet[T, ID] extends Reader[T] {
 
   val link: Link[ID]
 
-  def get(id: ID)(implicit g: GitHub, ec: EC): FR[T] = g.getAndCache[T](HttpUrl.get(link.urlFor(id)))
+  def get(id: ID)(using g: GitHub): FR[T] = g.gitHubHttp.getAndCache[T](link.urlFor(id))
 }
 
 trait CanCheck[ID] {
 
   val link: Link[ID]
 
-  def check(id: ID)(implicit g: GitHub, ec: EC): FR[Boolean] =
-    g.executeAndCheck(_.url(link.urlFor(id)))
+  def check(id: ID)(using g: GitHub): FR[Boolean] =
+    g.executeAndCheck(quickRequest.get(link.urlFor(id)))
 }
 
 trait CanDelete[ID] {
 
   val link: Link[ID]
 
-  def delete(id: ID)(implicit g: GitHub, ec: EC): FR[Boolean] =
-    g.executeAndCheck(_.url(link.urlFor(id)).delete())
+  def delete(id: ID)(using g: GitHub): FR[Boolean] =
+    g.executeAndCheck(quickRequest.delete(link.urlFor(id)))
 }
 
 trait CanReplace[T, ID] extends Reader[T] {
@@ -216,11 +219,11 @@ trait CanReplace[T, ID] extends Reader[T] {
    * https://docs.github.com/en/rest/issues/labels?apiVersion=2022-11-28#set-labels-for-an-issue
    */
   def replace(ids: Seq[ID])(implicit g: GitHub, ec: EC, w: Writes[ID]): FR[Seq[T]] =
-    g.put(HttpUrl.get(link.listUrl), ids)
+    g.put(Uri.unsafeParse(link.listUrl), ids)
 }
 
 trait Link[P] {
-  def urlFor(p: P): String
+  def urlFor(p: P): Uri
   val listUrl: String
 }
 
@@ -232,14 +235,14 @@ object Link {
 
     override def urlFor(p: P) = {
       val replacement = if (suffix.startsWith("/")) s"/$p" else p.toString
-      suffixedUrl.replace(encasedSuffix, replacement)
+      Uri.unsafeParse(suffixedUrl.replace(encasedSuffix, replacement))
     }
 
     override val listUrl = suffixedUrl.stripSuffix(encasedSuffix)
   }
 
   def fromListUrl[P](suppliedListUrl: String) = new Link[P] {
-    override def urlFor(p: P) = s"$listUrl/$p"
+    override def urlFor(p: P) = Uri.unsafeParse(s"$listUrl/$p")
 
     override val listUrl = suppliedListUrl
   }
@@ -248,7 +251,7 @@ object Link {
 case class SuffixedEndpointHandler[P](suffixedUrl: String, suffix: String) extends Link[P] {
   val encasedSuffix = s"{$suffix}"
 
-  def urlFor(p: P): String = suffixedUrl.replace(encasedSuffix, s"/$p")
+  def urlFor(p: P): Uri = Uri.unsafeParse(suffixedUrl.replace(encasedSuffix, s"/$p"))
 
   val listUrl = suffixedUrl.stripSuffix(encasedSuffix)
 }
@@ -262,8 +265,6 @@ case class Permissions(
 object Permissions {
   implicit val readsPermissions: Reads[Permissions] = Json.reads[Permissions]
 }
-
-
 
 object Repo {
 
@@ -289,8 +290,8 @@ object Repo {
     // https://developer.github.com/v3/git/trees/#get-a-tree
     // https://developer.github.com/v3/git/trees/#create-a-tree
 
-    def getRecursively(sha: String)(implicit g: GitHub, ec: EC): FR[Tree] =
-      g.getAndCache(HttpUrl.get(link.urlFor(sha)+"?recursive=1"))
+    def getRecursively(sha: String)(implicit g: GitHub): FR[Tree] =
+      g.gitHubHttp.getAndCache(link.urlFor(sha).addParam("recursive", "1"))
 
   }
 
