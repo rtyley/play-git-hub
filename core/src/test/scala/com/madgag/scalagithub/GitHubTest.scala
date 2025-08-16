@@ -16,65 +16,78 @@
 
 package com.madgag.scalagithub
 
+import cats.*
+import cats.effect.IO
+import cats.effect.testing.scalatest.AsyncIOSpec
 import com.madgag.github.AccessToken
-import com.madgag.github.Implicits._
-import com.madgag.github.apps.{GitHubAppAuth, InstallationAccess}
-import com.madgag.scalagithub.model.RepoId
-import org.apache.pekko.actor.ActorSystem
-import org.scalatest.OptionValues
+import com.madgag.github.apps.GitHubAppAuth
+import com.madgag.scalagithub.model.{PullRequest, RepoId}
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
-import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.{Assertion, OptionValues}
 
 import java.time.Instant
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.ExecutionContext
 
-class GitHubTest extends AnyFlatSpec with Matchers with OptionValues with ScalaFutures with IntegrationPatience {
+class GitHubTest extends AsyncFlatSpec with AsyncIOSpec with Matchers with OptionValues with ScalaFutures with IntegrationPatience {
 
-  {
-    val installationAccess: InstallationAccess =
-      GitHubAppAuth.fromConfigMap(sys.env, prefix = "PLAY_GIT_HUB_TEST").accessSoleInstallation().futureValue
+  implicit override def executionContext: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
 
+  val appGitHub = (for {
+    installationAccess <- GitHubAppAuth.fromConfigMap(sys.env, prefix = "PLAY_GIT_HUB_TEST").accessSoleInstallation()
+  } yield {
+    val accountAccess = installationAccess.accountAccess()
     println(s"Installation account: ${installationAccess.installedOnAccount.atLogin}")
+    accountAccess.gitHub
+  }).unsafeRunSync()
 
-    implicit val appGitHub: GitHub = new GitHub(installationAccess.credentials)
+  it should "be able to make a request" in {
+    appGitHub.getUser("rtyley").map(_.result).asserting(_.name.value should startWith("Roberto"))
+  }
 
-    it should "be able to make a request" in {
-      appGitHub.getUser("rtyley").futureValue.result.name.value should startWith("Roberto")
-    }
+  it should "be able to get a public repo" in {
+    appGitHub.getRepo(RepoId("rtyley", "bfg-repo-cleaner")).map(_.result).asserting(_.id shouldBe 7266492)
+  }
 
-    it should "be able to get a public repo" in {
-      appGitHub.getRepo(RepoId("rtyley", "bfg-repo-cleaner")).futureValue.result.id shouldBe 7266492
-    }
+  it should "be able to get a public PR by id" in { // https://github.com/rtyley/bfg-repo-cleaner/pull/527
+    appGitHub.getPullRequest(PullRequest.Id(RepoId("rtyley", "bfg-repo-cleaner"), 527)).map(_.result).asserting(_.merged_by.value.login shouldBe "rtyley")
+  }
 
-    it should "be able get the 'merged' state of a repo" in {
-      val repo = appGitHub.getRepo(RepoId("rtyley", "play-git-hub")).futureValue.result
-      val mergedPr = repo.pullRequests.get(2).futureValue.result
+  it should "be able get the 'merged' state of a PR" in {
+    given GitHub = appGitHub
+    for {
+      repo <- appGitHub.getRepo(RepoId("rtyley", "play-git-hub"))
+      repoPRs = repo.result.pullRequests
+      mergedPr <- repoPRs.get(2).map(_.result)
+      unmergedPr <- repoPRs.get(16).map(_.result)
+    } yield {
       mergedPr.merged.value shouldBe true
       mergedPr.merged_by.value.login shouldBe "rtyley"
 
-      val unmergedPr = repo.pullRequests.get(16).futureValue.result
       unmergedPr.merged.value shouldBe false
       unmergedPr.merged_by shouldBe None
     }
+  }
 
-    it should "be able list PRs" in {
-      val repo = appGitHub.getRepo(RepoId("rtyley", "play-git-hub")).futureValue.result
-      implicit val as: ActorSystem = ActorSystem.create()
-      val prs = repo.pullRequests.list(Map("state" -> "closed")).all()
-      prs.futureValue.size should be > 2
+  it should "be able list PRs" in {
+    given GitHub = appGitHub
+    for {
+      repo <- appGitHub.getRepo(RepoId("rtyley", "play-git-hub")).map(_.result)
+      prs <- repo.pullRequests.list(Map("state" -> "closed")).compile.toList
+    } yield {
+      prs.size should be > 2
     }
+  }
 
-    it should "be able to list repos accessible to the installation" in {
-      implicit val sys: ActorSystem = ActorSystem("MyTest")
-
-      val installationReposHead = appGitHub.listReposAccessibleToTheApp().allItems().futureValue.head
-      installationReposHead.total_count should be > 0 // needs to be granted access to at least one repo!
+  it should "be able to list repos accessible to the installation" in {
+    appGitHub.listReposAccessibleToTheApp().take(1).compile.toList.asserting { installationRepos =>
+      installationRepos.head.total_count should be > 0 // needs to be granted access to at least one repo!
     }
+  }
 
-    it should "be able to get rate limit info" in {
-      appGitHub.checkRateLimit().futureValue.value.quotaUpdate.limit shouldBe >(1000)
-    }
+  it should "be able to get rate limit info" in {
+    appGitHub.checkRateLimit().asserting(_.value.quotaUpdate.limit should be > 1000)
   }
 
   {
@@ -82,11 +95,11 @@ class GitHubTest extends AnyFlatSpec with Matchers with OptionValues with ScalaF
       new GitHub(GitHubCredentials.Provider.fromStatic(AccessToken(sys.env("PLAY_GIT_HUB_TEST_GITHUB_ACCESS_TOKEN"))))
 
     it should "be able to get a decent rate limit" in {
-      userGitHub.checkRateLimit().futureValue.value.quotaUpdate.limit should be > 500
+      userGitHub.checkRateLimit().asserting(_.value.quotaUpdate.limit should be > 500)
     }
 
     it should "be able to get the authenticated user" in {
-      userGitHub.getUser().futureValue.result.created_at.value.toInstant should be < Instant.now()
+      userGitHub.getUser().map(_.result).asserting(_.created_at.value.toInstant should be < Instant.now())
     }
   }
 }

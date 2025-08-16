@@ -16,6 +16,8 @@
 
 package com.madgag.github
 
+import cats.effect.IO
+import cats.effect.unsafe.IORuntime
 import com.github.blemale.scaffeine.{AsyncLoadingCache, Scaffeine}
 import com.madgag.github.AccessToken.Cache.timeUntilNearExpirationOf
 import com.madgag.scalagithub.GitHubCredentials
@@ -25,30 +27,32 @@ import java.time.Clock.systemUTC
 import java.time.{Clock, Duration, Instant}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
-import scala.jdk.DurationConverters._
+import scala.jdk.DurationConverters.*
 
 case class AccessToken(value: String) extends AnyVal
 
 object AccessToken {
   implicit val reads: Reads[AccessToken] = JsPath.read[String].map(AccessToken(_))
 
-  class Cache(provider: () => Future[Expirable[AccessToken]])(implicit ec: ExecutionContext)
-    extends GitHubCredentials.Provider {
-
-    private val cache: AsyncLoadingCache[Unit, Expirable[GitHubCredentials]] = Scaffeine()
+  def cache(provider: IO[Expirable[AccessToken]])(using IORuntime): GitHubCredentials.Provider = {
+    val cache: AsyncLoadingCache[Unit, Expirable[GitHubCredentials]] = Scaffeine()
       .maximumSize(1)
       .expireAfter[Unit, Expirable[GitHubCredentials]](
         create = (_, token) => timeUntilNearExpirationOf(token),
         update = (_, token, _) => timeUntilNearExpirationOf(token),
         read = (_, _, currentDuration) => currentDuration
       )
-      .buildAsyncFuture(_ => provider().map(_.map(GitHubCredentials(_))))
+      .buildAsyncFuture {
+        _ =>
+          println("No cached access token...")
+          provider.map(_.map(GitHubCredentials(_))).unsafeToFuture()
+      }
 
-    override def apply(): Future[GitHubCredentials] = cache.get(()).map(_.value)
+    IO.fromFuture(IO(cache.get(()))).map(_.value)
   }
 
   object Cache {
-    def timeUntilNearExpirationOf(expirable: Expirable[_])(implicit clock: Clock = systemUTC): FiniteDuration =
+    def timeUntilNearExpirationOf(expirable: Expirable[_])(using clock: Clock = systemUTC): FiniteDuration =
       Duration.between(clock.instant(), expirable.expires).toScala * 9 div 10
   }
 }

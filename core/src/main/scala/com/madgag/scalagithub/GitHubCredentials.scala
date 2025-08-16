@@ -16,6 +16,7 @@
 
 package com.madgag.scalagithub
 
+import cats.effect.IO
 import com.madgag.github.AccessToken
 import com.madgag.scalagithub.BearerAuthTransportConfig.bearerAuth
 import org.eclipse.jgit.api.{TransportCommand, TransportConfigCallback}
@@ -24,7 +25,7 @@ import org.eclipse.jgit.transport.{CredentialsProvider, TransportHttp, UsernameP
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 import scala.concurrent.Future
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 case class GitHubCredentials(accessToken: AccessToken) {
   lazy val git: CredentialsProvider = new UsernamePasswordCredentialsProvider("x-access-token", accessToken.value)
@@ -45,10 +46,10 @@ case class GitHubCredentials(accessToken: AccessToken) {
 }
 
 object GitHubCredentials {
-  type Provider = () => Future[GitHubCredentials]
+  type Provider = IO[GitHubCredentials]
 
   object Provider {
-    def fromStatic(accessToken: AccessToken): Provider = () => Future.successful(GitHubCredentials(accessToken))
+    def fromStatic(accessToken: AccessToken): Provider = IO.pure(GitHubCredentials(accessToken))
   }
 }
 
