@@ -118,7 +118,7 @@ object GitHub {
 
 class GitHub(val gitHubHttp: GitHubHttp) {
   import GitHub.*
-  
+
   def executeAndWrap[T](req: Request[String])(processor: Response[String] => T): FR[T] = for {
     resp <- gitHubHttp.execute(req)
   } yield GitHubResponse(logAndGetMeta(resp), processor(resp))
@@ -126,7 +126,7 @@ class GitHub(val gitHubHttp: GitHubHttp) {
   def executeAndReadJson[T: Reads](req: Request[String]): FR[T] = executeAndWrap(req) {
     response => readAndResolve[T](req, response)
   }
-  
+
   def create[CC : Writes, Res: Reads](uri: Uri, cc: CC) : FR[Res] = executeAndReadJson[Res](reqWithBody(cc).post(uri))
 
   def put[CC : Writes, Res: Reads](uri: Uri, cc: CC) : FR[Res] = executeAndReadJson[Res](reqWithBody(cc).put(uri))
