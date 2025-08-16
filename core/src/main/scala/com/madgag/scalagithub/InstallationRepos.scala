@@ -16,12 +16,14 @@
 
 package com.madgag.scalagithub
 
-import com.madgag.scalagithub.GitHubCredentials.Provider
-import com.madgag.scalagithub.model.Account
+import com.madgag.scalagithub.model.Repo
+import play.api.libs.json.{Json, Reads}
 
-case class AccountCredentials(
-  account: Account,
-  credentials: Provider
-) {
-  val gitHub = new GitHub(credentials)
+case class InstallationRepos(
+  total_count: Int,
+  repositories: Seq[Repo]
+)
+
+object InstallationRepos {
+  given Reads[InstallationRepos] = Json.reads
 }

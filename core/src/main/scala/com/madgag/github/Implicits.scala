@@ -16,26 +16,26 @@
 
 package com.madgag.github
 
-import org.apache.pekko.NotUsed
-import org.apache.pekko.actor.ActorSystem
-import org.apache.pekko.stream.scaladsl.{Keep, Sink}
+import cats.*
+import cats.effect.*
+import com.madgag.scalagithub.GitHub
 
+import scala.concurrent.*
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent._
 import scala.util.{Success, Try}
 
 object Implicits {
 
-  implicit class RichItemSource[T](s: org.apache.pekko.stream.scaladsl.Source[T, NotUsed]) {
-    def allItems()(implicit as: ActorSystem): Future[Seq[T]] = s.toMat(Sink.seq)(Keep.right).run()
+  implicit class RichItemSource[T](s: GitHub.ListStream[T]) {
+    def allItems(): IO[Seq[T]] = s.compile.toList
   }
 
-  implicit class RichSeqSource[T](s: org.apache.pekko.stream.scaladsl.Source[Seq[T], NotUsed]) {
-    def all()(implicit as: ActorSystem): Future[Seq[T]] = s.toMat(Sink.reduce[Seq[T]](_ ++ _))(Keep.right).run()
+  implicit class RichSeqSource[T](s: GitHub.ListStream[Seq[T]]) {
+    def all(): IO[Seq[T]] = s.compile.foldMonoid
   }
 
   implicit class RichFuture[S](f: Future[S]) {
-    lazy val trying = {
+    lazy val trying: Future[Try[S]] = {
       val p = Promise[Try[S]]()
       f.onComplete { case t => p.complete(Success(t)) }
       p.future
