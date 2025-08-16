@@ -38,6 +38,8 @@ import scala.jdk.CollectionConverters._
 
 trait TestRepoCreation extends Eventually with ScalaFutures {
 
+  import org.scalatest.matchers.must.Matchers._
+
   val testRepoNamePrefix: String
   val testFixturesAccount: Account
   val testFixturesCredentials: Provider
@@ -53,6 +55,13 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
     _ <- Future.traverse(oldRepos.filter(isOldTestRepo))(_.delete())
   } yield ()
 
+  def eventuallyConsistent[T](thunk: => Future[T]): T = eventually {
+    val result = thunk.futureValue
+    Thread.sleep(1000)
+    thunk.futureValue mustEqual result
+    result
+  }
+
   def createTestRepo(fileName: String)(implicit ec: ExecutionContext): Repo = {
     val cr = CreateRepo(
       name = testRepoNamePrefix + System.currentTimeMillis().toString,
@@ -63,7 +72,8 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
 
     val localGitRepo = unpackRepo(fileName)
 
-    val testGithubRepo = eventually { github.getRepo(testRepoId).futureValue }
+    val testGithubRepo = // TODO eventuallyConcistent
+      eventually { github.getRepo(testRepoId).futureValue }
 
     val config = localGitRepo.getConfig
     config.setString("remote", "origin", "url", testGithubRepo.clone_url)
@@ -93,6 +103,7 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
     }
     require(clonedRepo.getRepository.findRef(defaultBranchName).getObjectId == localGitRepo.resolve("HEAD"))
 
+    require(testGithubRepo.default_branch == "main") // TODO remove this...?
     testGithubRepo
   }
 }
