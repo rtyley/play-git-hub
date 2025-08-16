@@ -33,8 +33,6 @@ object GitHubWithPATAuthTest extends IOSuite with OptionValues {
   type Res = GitHub
 
   def sharedResource : Resource[IO, Res] = for {
-    httpBackend <- HttpClientCatsBackend.resource[IO]()
-    dispatcher <- Dispatcher.parallel[IO]
     githubFactory <- GitHub.Factory()
     clientWithContext <- Resource.eval(githubFactory.accessWithUserToken(AccessToken(sys.env("PLAY_GIT_HUB_TEST_GITHUB_ACCESS_TOKEN"))))
   } yield clientWithContext.gitHub
