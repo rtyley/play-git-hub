@@ -20,6 +20,7 @@ import com.madgag.git.RichRepo
 import com.madgag.git.test.unpackRepo
 import com.madgag.github.Implicits._
 import com.madgag.scalagithub.GitHub
+import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.GitHubCredentials.Provider
 import com.madgag.scalagithub.commands.CreateRepo
 import com.madgag.scalagithub.model.{Account, Repo}
@@ -53,6 +54,15 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
     _ <- Future.traverse(oldRepos.filter(isOldTestRepo))(_.delete())
   } yield ()
 
+  def eventuallyConsistent[T](thunk: => FR[T]): T = eventually {
+    import org.scalatest.matchers.must.Matchers._
+
+    val result = thunk.futureValue.result
+    Thread.sleep(1000)
+    thunk.futureValue.result mustEqual result
+    result
+  }
+
   def createTestRepo(fileName: String)(implicit ec: ExecutionContext): Repo = {
     val cr = CreateRepo(
       name = testRepoNamePrefix + System.currentTimeMillis().toString,
@@ -63,7 +73,8 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
 
     val localGitRepo = unpackRepo(fileName)
 
-    val testGithubRepo = eventually { github.getRepo(testRepoId).futureValue }
+    val testGithubRepo = // TODO eventuallyConsistent
+      eventually { github.getRepo(testRepoId).futureValue }
 
     val config = localGitRepo.getConfig
     config.setString("remote", "origin", "url", testGithubRepo.clone_url)
@@ -93,6 +104,7 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
     }
     require(clonedRepo.getRepository.findRef(defaultBranchName).getObjectId == localGitRepo.resolve("HEAD"))
 
+    require(testGithubRepo.default_branch == "main") // TODO remove this...?
     testGithubRepo
   }
 }
