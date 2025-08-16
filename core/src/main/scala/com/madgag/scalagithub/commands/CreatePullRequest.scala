@@ -26,5 +26,5 @@ case class CreatePullRequest(
 )
 
 object CreatePullRequest {
-  implicit val writesCreatePullRequest: OWrites[CreatePullRequest] = Json.writes[CreatePullRequest]
+  given OWrites[CreatePullRequest] = Json.writes[CreatePullRequest]
 }

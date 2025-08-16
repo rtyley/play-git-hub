@@ -33,7 +33,7 @@ case class Team(
 
   val members = new CanList[User, String] {
     override val link: Link[String] = Link.fromSuffixedUrl(members_url, "/member")
-    override implicit val readsT: Reads[User] = User.readsUser
+    override implicit val readsT: Reads[User] = User.given_Reads_User
   }
 }
 

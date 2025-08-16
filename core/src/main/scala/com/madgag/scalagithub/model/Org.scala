@@ -71,7 +71,7 @@ case class Org(
   private def userField(suffix: String) =
     new CanList[User, String] with CanCheck[String] with CanDelete[String] {
       override val link: Link[String] = Link.fromListUrl(s"$url/$suffix")
-      override implicit val readsT: Reads[User] = User.readsUser
+      override implicit val readsT: Reads[User] = User.given_Reads_User
     }
 
   // GET /orgs/:org/members
@@ -82,13 +82,13 @@ case class Org(
   // GET /orgs/:org/public_members/:username
   val publicMembers = userField("public_members")
 
-  override def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: ExecutionContext): FR[Repo] =
-    github.createOrgRepo(login, cr)
+  override def createRepo(cr: CreateRepo)(using g: GitHub): FR[Repo] =
+    g.createOrgRepo(login, cr)
 
-  override def listRepos()(implicit github: GitHub, ec: ExecutionContext): Source[Seq[Repo], NotUsed] =
-    github.listOrgRepos(login,"updated", "desc")
+  override def listRepos(queryParams: (String, String)*)(using g: GitHub): ListStream[Repo] =
+    g.listOrgRepos(login, queryParams*)
 }
 
 object Org {
-  implicit val readsUser: Reads[Org] = Json.reads[Org]
+  given Reads[Org] = Json.reads[Org]
 }

@@ -37,12 +37,12 @@ case class User(
 ) extends Account {
   override type Self = User
 
-  override def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: EC): FR[Repo] = github.createRepo(cr)
+  override def createRepo(cr: CreateRepo)(using g: GitHub): FR[Repo] = g.createRepo(cr)
 
-  override def listRepos()(implicit github: GitHub, ec: EC): Source[Seq[Repo], NotUsed] =
-    github.listRepos("updated", "desc")
+  override def listRepos(queryParams: (String, String)*)(using g: GitHub): ListStream[Repo] =
+    g.listRepos(queryParams*)
 }
 
 object User {
-  implicit val readsUser: Reads[User] = Json.reads[User]
+  given Reads[User] = Json.reads[User]
 }

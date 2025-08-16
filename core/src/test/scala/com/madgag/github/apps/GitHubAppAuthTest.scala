@@ -16,19 +16,25 @@
 
 package com.madgag.github.apps
 
-import org.scalatest.OptionValues
-import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
-import org.scalatest.flatspec.AnyFlatSpec
-import org.scalatest.matchers.should.Matchers
+import cats.effect.*
+import sttp.client4.httpclient.cats.HttpClientCatsBackend
+import weaver.IOSuite
 
-import scala.concurrent.ExecutionContext.Implicits.global
+object GitHubAppAuthTest extends IOSuite {
 
-class GitHubAppAuthTest extends AnyFlatSpec with Matchers with OptionValues with ScalaFutures with IntegrationPatience {
-  val gitHubAppAuth: GitHubAppAuth = GitHubAppAuth.fromConfigMap(sys.env, prefix="PLAY_GIT_HUB_TEST")
+  type Res = GitHubAppAuth
 
-  it should "be able to request GitHub App installations" in {
-    val installation = gitHubAppAuth.getInstallations().futureValue.head
-    installation.id shouldBe 80021990
-    installation.account.login shouldBe "play-git-hub-test-org"
+  def sharedResource : Resource[IO, Res] = HttpClientCatsBackend.resource[IO]().map { httpBackend =>
+    GitHubAppAuth(GitHubAppJWTs.fromConfigMap(sys.env, prefix="PLAY_GIT_HUB_TEST"), httpBackend)
   }
+
+  test("be able to request GitHub App installations") { (gitHubAppAuth, log) => for {
+      installation <- gitHubAppAuth.getSoleInstallation()
+      _ <- log.info(s"Got installation: $installation")
+    } yield {
+      expect(clue(installation.id) == 80021990) and
+        expect(clue(installation.account.login) == "play-git-hub-test-org")
+    }
+  }
+
 }

@@ -16,13 +16,12 @@
 
 package com.madgag.rfc5988link
 
-import okhttp3.HttpUrl
-import fastparse._
-import NoWhitespace._
+import com.madgag.scala.collection.decorators.*
+import fastparse.*
+import fastparse.NoWhitespace.*
+import sttp.model.Uri
 
-import com.madgag.scala.collection.decorators._
-
-case class LinkTarget(url: HttpUrl, attributes: Seq[(String, String)]) {
+case class LinkTarget(uri: Uri, attributes: Seq[(String, String)]) {
 
   lazy val attributeMap: Map[String, Seq[String]] = attributes.groupBy(_._1).mapV(_.map(_._2))
 
@@ -30,7 +29,7 @@ case class LinkTarget(url: HttpUrl, attributes: Seq[(String, String)]) {
 }
 
 object LinkParser {
-  def url[$: P]: P[HttpUrl] = P("<" ~/ CharsWhile(_ != '>', 1).! ~ ">").map(HttpUrl.parse)
+  def url[$: P]: P[Uri] = P("<" ~/ CharsWhile(_ != '>', 1).! ~ ">").map(Uri.unsafeParse)
 
   def linkParam[$: P]: P[(String, String)] =
     P("; " ~ CharsWhile(_ != '=',1).! ~ "=\"" ~ CharsWhile(_ != '"',1).! ~ "\"" )
