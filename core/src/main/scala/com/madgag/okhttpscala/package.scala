@@ -25,7 +25,7 @@ import _root_.scala.util.Try
 
 
 package object okhttpscala {
-  implicit def jsonToRequestBody(json: JsValue): RequestBody = RequestBody.create(JsonMediaType, json.toString)
+  implicit def jsonToRequestBody(json: JsValue): RequestBody = RequestBody.create(json.toString, JsonMediaType)
 
   val JsonMediaType: MediaType = MediaType.parse("application/json; charset=utf-8")
 

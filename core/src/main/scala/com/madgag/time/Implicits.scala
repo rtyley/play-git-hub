@@ -20,7 +20,7 @@ import _root_.java.time.{Clock, Duration, Instant}
 import _root_.java.time.temporal.Temporal
 import java.util.concurrent.TimeUnit
 import java.{time => java}
-import org.joda.{time, time => joda}
+import org.joda.{time => joda}
 
 import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
@@ -53,6 +53,6 @@ object Implicits {
 
   implicit def javaDuration2SDuration(dur: java.Duration): FiniteDuration = FiniteDuration(dur.toMillis, TimeUnit.MILLISECONDS)
 
-  implicit def javaDuration2jodaDuration(dur: java.Duration): time.Duration = joda.Duration.millis(dur.toMillis)
+  implicit def javaDuration2jodaDuration(dur: java.Duration): joda.Duration = joda.Duration.millis(dur.toMillis)
 
 }

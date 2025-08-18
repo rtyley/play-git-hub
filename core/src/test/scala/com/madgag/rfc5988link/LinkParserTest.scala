@@ -19,37 +19,37 @@ package com.madgag.rfc5988link
 import com.madgag.rfc5988link.LinkParser.linkValues
 import fastparse._
 import okhttp3.HttpUrl
+import org.scalatest.Inside
 import org.scalatest.flatspec._
 import org.scalatest.matchers._
 
-class LinkParserTest extends AnyFlatSpec with should.Matchers {
+class LinkParserTest extends AnyFlatSpec with should.Matchers with Inside {
   "FastParse" should "parse examples from RFC 5988 Section 5.5" in {
-    val Parsed.Success(value, _) = {
-      parse("<http://example.com/TheBook/chapter2>; rel=\"previous\"; title=\"previous chapter\"", linkValues(_))
+    inside(parse("<http://example.com/TheBook/chapter2>; rel=\"previous\"; title=\"previous chapter\"", linkValues(_))) {
+      case Parsed.Success(value, _) =>
+        value should contain only LinkTarget(
+          HttpUrl.parse("http://example.com/TheBook/chapter2"),
+          Seq(
+            "rel" -> "previous",
+            "title" -> "previous chapter"
+          )
+        )
     }
-
-    value should contain only LinkTarget(
-      HttpUrl.parse("http://example.com/TheBook/chapter2"),
-      Seq(
-        "rel" -> "previous",
-        "title" -> "previous chapter"
-      )
-    )
   }
 
   it should "parse a typical GitHub pagination response" in {
-    val Parsed.Success(value, _) =
-      parse("<https://api.github.com/user/52038/repos?page=2>; rel=\"next\", <https://api.github.com/user/52038/repos?page=4>; rel=\"last\"", linkValues(_))
-
-    value should contain inOrderOnly(
-      LinkTarget(
-        HttpUrl.parse("https://api.github.com/user/52038/repos?page=2"),
-        Seq("rel" -> "next")
-      ),
-      LinkTarget(
-        HttpUrl.parse("https://api.github.com/user/52038/repos?page=4"),
-        Seq("rel" -> "last")
-      )
-    )
+    inside(parse("<https://api.github.com/user/52038/repos?page=2>; rel=\"next\", <https://api.github.com/user/52038/repos?page=4>; rel=\"last\"", linkValues(_))) {
+      case Parsed.Success(value, _) =>
+        value should contain inOrderOnly(
+          LinkTarget(
+            HttpUrl.parse("https://api.github.com/user/52038/repos?page=2"),
+            Seq("rel" -> "next")
+          ),
+          LinkTarget(
+            HttpUrl.parse("https://api.github.com/user/52038/repos?page=4"),
+            Seq("rel" -> "last")
+          )
+        )
+    }
   }
 }
