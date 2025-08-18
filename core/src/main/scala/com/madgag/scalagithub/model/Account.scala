@@ -25,7 +25,7 @@ import org.apache.pekko.stream.scaladsl.Source
 import play.api.libs.json.Reads
 
 import java.time.ZonedDateTime
-import scala.concurrent.{ExecutionContext, ExecutionContext => EC}
+import scala.concurrent.{ExecutionContext => EC}
 
 trait Account {
   type Self <: Account
@@ -43,9 +43,9 @@ trait Account {
 
   def reFetch()(implicit g: GitHub, ec: EC, ev: Reads[Self]): FR[Self]  = g.getAndCache[Self](HttpUrl.get(url))
 
-  def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: ExecutionContext): FR[Repo]
+  def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: EC): FR[Repo]
 
-  def listRepos()(implicit github: GitHub, ec: ExecutionContext): Source[Seq[Repo], NotUsed]
+  def listRepos()(implicit github: GitHub, ec: EC): Source[Seq[Repo], NotUsed]
 }
 
 object Account {

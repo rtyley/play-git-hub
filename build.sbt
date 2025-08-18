@@ -4,8 +4,12 @@ import sbtversionpolicy.withsbtrelease.ReleaseVersion
 description := "Group of library code for Play, Git, and GitHub"
 
 ThisBuild / scalaVersion := "2.13.16"
+ThisBuild / crossScalaVersions := Seq(
+  scalaVersion.value,
+  "3.3.6"
+)
 
-val scalaGitVersion = "6.0.0"
+val scalaGitVersion = "7.0.0-PREVIEW.support-scala-3.2025-08-18T0747.e34aa011"
 val scalaGitTest = "com.madgag.scala-git" %% "scala-git-test" % scalaGitVersion
 val scalaTest = "org.scalatest" %% "scalatest" % "3.2.19"
 

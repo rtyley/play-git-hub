@@ -19,7 +19,7 @@ package com.madgag.playgithub.testkit
 import com.madgag.git.RichRepo
 import com.madgag.git.test.unpackRepo
 import com.madgag.github.Implicits._
-import com.madgag.scalagithub.GitHub
+import com.madgag.scalagithub.{AccountCredentials, GitHub}
 import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.GitHubCredentials.Provider
 import com.madgag.scalagithub.commands.CreateRepo
@@ -42,17 +42,16 @@ import scala.jdk.CollectionConverters._
 trait TestRepoCreation extends Eventually with ScalaFutures {
 
   val testRepoNamePrefix: String
-  val testFixturesAccount: Account
-  val testFixturesCredentials: Provider
+  val testFixtureAccountCredentials: AccountCredentials
 
-  implicit lazy val github: GitHub = new GitHub(testFixturesCredentials)
+  implicit lazy val github: GitHub = new GitHub(testFixtureAccountCredentials.credentials)
   implicit val actorSystem: ActorSystem
 
   def isOldTestRepo(repo: Repo): Boolean =
     repo.name.startsWith(testRepoNamePrefix) && repo.created_at.toInstant.age() > ofMinutes(30)
 
   def deleteTestRepos()(implicit ec: ExecutionContext): Future[Unit] = for {
-    oldRepos <- testFixturesAccount.listRepos().all()
+    oldRepos <- testFixtureAccountCredentials.account.listRepos().all()
     _ <- Future.traverse(oldRepos.filter(isOldTestRepo))(_.delete())
   } yield ()
 
@@ -71,7 +70,7 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
       `private` = false
     )
 
-    val testRepoId = testFixturesAccount.createRepo(cr).futureValue.repoId
+    val testRepoId = testFixtureAccountCredentials.account.createRepo(cr).futureValue.repoId
 
     val localGitRepo = unpackRepo(fileName)
 
@@ -90,7 +89,7 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
 
     val branchRefs: Seq[Ref] = localGitRepo.getRefDatabase.getRefsByPrefix(R_HEADS).asScala.toSeq
 
-    val creds = testFixturesCredentials().futureValue
+    val creds = testFixtureAccountCredentials.credentials().futureValue
     val pushResults =
       localGitRepo.git.push.setCredentialsProvider(creds.git).setPushTags().setPushAll().call()
 
