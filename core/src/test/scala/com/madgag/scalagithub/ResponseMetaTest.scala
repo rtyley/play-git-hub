@@ -16,17 +16,19 @@
 
 package com.madgag.scalagithub
 
+import com.madgag.scalagithub.ResponseMeta.RichHeaders
 import okhttp3.Headers
 import org.scalatest.OptionValues
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
+import java.net.http.HttpHeaders
 import java.time.Instant
 
 class ResponseMetaTest extends AnyFlatSpec with Matchers with OptionValues {
   it should "not crash if ratelimit state response headers are missing" in {
     ResponseMeta.rateLimitStatusFrom(
-      Headers.of("nothing-useful", "whatever")
+      Headers.of("nothing-useful", "whatever").toJdkHeaders
     ) shouldBe None
   }
 
@@ -37,7 +39,7 @@ class ResponseMetaTest extends AnyFlatSpec with Matchers with OptionValues {
         .add("x-ratelimit-remaining", "58")
         .add("x-ratelimit-limit", "60")
         .add("x-ratelimit-reset", "1698932232")
-        .build()
+        .build().toJdkHeaders
     ).value.quotaUpdate.capturedAt shouldBe Instant.parse("2023-11-02T12:37:22Z")
   }
 }

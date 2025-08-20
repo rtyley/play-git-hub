@@ -4,10 +4,6 @@ import sbtversionpolicy.withsbtrelease.ReleaseVersion
 description := "Group of library code for Play, Git, and GitHub"
 
 ThisBuild / scalaVersion := "3.3.6"
-ThisBuild / crossScalaVersions := Seq(
-  scalaVersion.value,
-  "2.13.16"
-)
 
 val scalaGitVersion = "7.0.3"
 val scalaGitTest = "com.madgag.scala-git" %% "scala-git-test" % scalaGitVersion
@@ -23,6 +19,9 @@ lazy val artifactProducingSettings = Seq(
 
 lazy val core = (project in file("core")).settings(artifactProducingSettings).settings(
   libraryDependencies ++= Seq(
+    "com.gu.etag-caching" %% "core" % "11.0.0-PREVIEW.support-fetching-then-parsing-with-key.2025-09-09T0923.3b4c7060",
+    "com.github.cb372" %% "cats-retry" % "4.0.0",
+    "org.typelevel" %% "cats-effect" % "3.6.3",
     "com.madgag" %% "rate-limit-status" % "1.0.1",
     "com.github.blemale" %% "scaffeine" % "5.3.0",
     "org.bouncycastle" % "bcpkix-jdk15on" % "1.70",
@@ -49,7 +48,7 @@ lazy val `play-git-hub-root` = (project in file(".")).aggregate(core, testkit).s
 )
 
 publish / skip := true
-// releaseVersion := ReleaseVersion.fromAggregatedAssessedCompatibilityWithLatestRelease().value
+releaseVersion := ReleaseVersion.fromAggregatedAssessedCompatibilityWithLatestRelease().value
 releaseProcess := Seq[ReleaseStep](
   checkSnapshotDependencies,
   inquireVersions,

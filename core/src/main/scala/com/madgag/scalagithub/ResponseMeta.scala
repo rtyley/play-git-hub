@@ -19,27 +19,35 @@ package com.madgag.scalagithub
 import com.madgag.ratelimitstatus.{QuotaUpdate, RateLimit}
 import com.madgag.rfc5988link.{LinkParser, LinkTarget}
 import fastparse.parse
-import okhttp3._
+import okhttp3.*
 import play.api.http.Status.NOT_MODIFIED
+import sourcecode.Text.generate
 
 import java.time.Duration.ofHours
 import java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME
 import java.time.{Instant, ZonedDateTime}
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 import scala.language.implicitConversions
+import scala.jdk.OptionConverters._
 
 object ResponseMeta {
+  
+  trait Transformations[T] {
+    
+  }
+  
   val GitHubRateLimit: RateLimit = RateLimit(ofHours(1))
 
   implicit class RichHeaders(headers: Headers) {
-    def getOpt(name: String): Option[String] = Option(headers.get(name))
+    def toJdkHeaders: java.net.http.HttpHeaders =
+      java.net.http.HttpHeaders.of(headers.toMultimap, (_,_) => true )
   }
 
-  def rateLimitStatusFrom(headers: Headers): Option[RateLimit.Status] = for {
-    remaining <- headers.getOpt("X-RateLimit-Remaining")
-    limit <- headers.getOpt("X-RateLimit-Limit")
-    reset <- headers.getOpt("X-RateLimit-Reset")
-    date <- headers.getOpt("Date")
+  def rateLimitStatusFrom(headers: java.net.http.HttpHeaders): Option[RateLimit.Status] = for {
+    remaining <- headers.firstValue("X-RateLimit-Remaining").toScala
+    limit <- headers.firstValue("X-RateLimit-Limit").toScala
+    reset <- headers.firstValue("X-RateLimit-Reset").toScala
+    date <- headers.firstValue("Date").toScala
   } yield GitHubRateLimit.statusFor(QuotaUpdate(
     remaining = remaining.toInt,
     limit = limit.toInt,
@@ -47,16 +55,13 @@ object ResponseMeta {
     capturedAt = ZonedDateTime.parse(date, RFC_1123_DATE_TIME).toInstant
   ))
 
-  def rateLimitFrom(response: Response): Quota = {
-    val networkResponse = Option(response.networkResponse())
-    Quota(
-      consumed = if (networkResponse.exists(_.code != NOT_MODIFIED)) 1 else 0,
-      networkResponse.flatMap(resp => rateLimitStatusFrom(resp.headers))
-    )
-  }
+  def rateLimitFrom(notModified: Boolean, headers: Option[java.net.http.HttpHeaders]): Quota = Quota(
+    consumed = if (notModified) 1 else 0,
+    headers.flatMap(rateLimitStatusFrom)
+  )
 
-  def requestScopesFrom(response: Response): Option[RequestScopes] = {
-    def scopes(h: String): Option[Set[String]] = Option(response.header(h)).map(_.split(',').map(_.trim).toSet)
+  def requestScopesFrom(headers: java.net.http.HttpHeaders): Option[RequestScopes] = {
+    def scopes(h: String): Option[Set[String]] = headers.firstValue(h).toScala.map(_.split(',').map(_.trim).toSet)
 
     for {
       oAuthScopes <- scopes("X-OAuth-Scopes")
@@ -64,15 +69,29 @@ object ResponseMeta {
     } yield RequestScopes(oAuthScopes, acceptedOAuthScopes)
   }
 
-  def linksFrom(response: Response): Seq[LinkTarget] = for {
-    linkHeader <- response.headers("Link").asScala.toSeq
+  def linksFrom(headers: java.net.http.HttpHeaders): Seq[LinkTarget] = for {
+    linkHeader <- headers.allValues("Link").asScala.toSeq
     linkTargets <- parse(linkHeader, LinkParser.linkValues(_)).get.value
   } yield linkTargets
 
-  def from(resp: Response) =
-    ResponseMeta(rateLimitFrom(resp), requestScopesFrom(resp), linksFrom(resp))
+  def from(resp: Response): ResponseMeta = {
+    val headers = resp.headers.toJdkHeaders
+    ResponseMeta(
+      rateLimitFrom(resp.code == NOT_MODIFIED, Option(resp.networkResponse).map(_.headers.toJdkHeaders)),
+      requestScopesFrom(headers),
+      linksFrom(headers)
+    )
+  }
+
+  def from(resp: java.net.http.HttpResponse[_]) = ResponseMeta(
+    rateLimitFrom(resp.statusCode == NOT_MODIFIED, Some(resp.headers)),
+    requestScopesFrom(resp.headers),
+    linksFrom(resp.headers)
+  )
 }
 
 case class ResponseMeta(quota: Quota, requestScopes: Option[RequestScopes], links: Seq[LinkTarget]) {
   val nextOpt: Option[HttpUrl] = links.find(_.relOpt.contains("next")).map(_.url)
 }
+
+case class StoredMeta(nextOpt: Option[HttpUrl])

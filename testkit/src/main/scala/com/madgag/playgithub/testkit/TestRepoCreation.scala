@@ -18,13 +18,13 @@ package com.madgag.playgithub.testkit
 
 import com.madgag.git.RichRepo
 import com.madgag.git.test.unpackRepo
-import com.madgag.github.Implicits._
-import com.madgag.scalagithub.GitHub
+import com.madgag.github.Implicits.*
+import com.madgag.scalagithub.{AccountAccess, GitHub}
 import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.GitHubCredentials.Provider
 import com.madgag.scalagithub.commands.CreateRepo
 import com.madgag.scalagithub.model.{Account, Repo}
-import com.madgag.time.Implicits._
+import com.madgag.time.Implicits.*
 import org.apache.pekko.actor.ActorSystem
 import org.eclipse.jgit.api.{CloneCommand, Git}
 import org.eclipse.jgit.lib.Constants.R_HEADS
@@ -32,27 +32,26 @@ import org.eclipse.jgit.lib.Ref
 import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.scalatest.Inspectors.forAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatest.matchers.should.Matchers._
+import org.scalatest.matchers.should.Matchers.*
 
 import java.nio.file.Files.createTempDirectory
 import java.time.Duration.ofMinutes
 import scala.concurrent.{ExecutionContext, Future}
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 trait TestRepoCreation extends Eventually with ScalaFutures {
 
   val testRepoNamePrefix: String
-  val testFixturesAccount: Account
-  val testFixturesCredentials: Provider
+  val testFixturesAccountAccess: AccountAccess
+  implicit val gitHub: GitHub = testFixturesAccountAccess.gitHub
 
-  implicit lazy val github: GitHub = new GitHub(testFixturesCredentials)
   implicit val actorSystem: ActorSystem
 
   def isOldTestRepo(repo: Repo): Boolean =
     repo.name.startsWith(testRepoNamePrefix) && repo.created_at.toInstant.age() > ofMinutes(30)
 
   def deleteTestRepos()(implicit ec: ExecutionContext): Future[Unit] = for {
-    oldRepos <- testFixturesAccount.listRepos().all()
+    oldRepos <- gitHub.listRepos(sort = "created", direction = "asc").all()
     _ <- Future.traverse(oldRepos.filter(isOldTestRepo))(_.delete())
   } yield ()
 
@@ -71,12 +70,12 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
       `private` = false
     )
 
-    val testRepoId = testFixturesAccount.createRepo(cr).futureValue.repoId
+    val testRepoId = gitHub.createRepo(cr).futureValue.repoId
 
     val localGitRepo = unpackRepo(fileName)
 
     val testGithubRepo = // TODO eventuallyConsistent
-      eventually { github.getRepo(testRepoId).futureValue }
+      eventually { gitHub.getRepo(testRepoId).futureValue }
 
     val config = localGitRepo.getConfig
     config.setString("remote", "origin", "url", testGithubRepo.clone_url)
@@ -90,7 +89,7 @@ trait TestRepoCreation extends Eventually with ScalaFutures {
 
     val branchRefs: Seq[Ref] = localGitRepo.getRefDatabase.getRefsByPrefix(R_HEADS).asScala.toSeq
 
-    val creds = testFixturesCredentials().futureValue
+    val creds = testFixturesAccountAccess.credentials().futureValue
     val pushResults =
       localGitRepo.git.push.setCredentialsProvider(creds.git).setPushTags().setPushAll().call()
 

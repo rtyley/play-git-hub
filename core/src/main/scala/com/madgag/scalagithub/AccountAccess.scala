@@ -19,9 +19,11 @@ package com.madgag.scalagithub
 import com.madgag.scalagithub.GitHubCredentials.Provider
 import com.madgag.scalagithub.model.Account
 
-case class AccountCredentials(
-  account: Account,
-  credentials: Provider
-) {
+import scala.concurrent.ExecutionContext
+
+class AccountAccess(
+  val account: Account,
+  val credentials: Provider
+)(implicit ec: ExecutionContext) {
   val gitHub = new GitHub(credentials)
 }

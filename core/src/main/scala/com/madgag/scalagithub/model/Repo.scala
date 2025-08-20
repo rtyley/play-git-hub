@@ -16,18 +16,17 @@
 
 package com.madgag.scalagithub.model
 
-import org.apache.pekko.NotUsed
-import org.apache.pekko.stream.scaladsl.Source
 import com.madgag.scalagithub.GitHub
-import com.madgag.scalagithub.GitHub.{FR, RichOkHttpBuilder}
+import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.commands._
 import okhttp3.HttpUrl
-import okhttp3.Request.Builder
-import play.api.libs.json.Json._
+import org.apache.pekko.NotUsed
+import org.apache.pekko.stream.scaladsl.Source
 import play.api.libs.json.{Json, Reads, Writes}
 
 import java.time.ZonedDateTime
 import scala.concurrent.{ExecutionContext => EC}
+import org.eclipse.jgit
 
 object RepoId {
   def from(fullName: String) = {
@@ -43,6 +42,12 @@ case class RepoId(owner: String, name: String) {
   require(!Seq(owner, name).exists(p => p.isEmpty || p.contains('/')))
 
   lazy val fullName = s"$owner/$name"
+}
+
+class RepoRefs(git_refs_url: String) extends CCreator[Ref, String, CreateRef](Link.fromSuffixedUrl(git_refs_url, "/sha"))
+  with CanGetAndList[Ref, String] {
+
+  def get(ref: jgit.lib.Ref)(implicit g: GitHub, ec: EC): FR[Ref] = get(ref.getName.stripPrefix("refs/"))
 }
 
 case class Repo(
@@ -77,8 +82,7 @@ case class Repo(
 
   val trees2 = new Repo.Trees(trees)
 
-  val refs = new CCreator[Ref, String, CreateRef](Link.fromSuffixedUrl(git_refs_url, "/sha"))
-    with CanGetAndList[Ref, String]
+  val refs = new RepoRefs(git_refs_url)
   // https://developer.github.com/v3/git/refs/#get-a-reference
   // https://developer.github.com/v3/git/refs/#create-a-reference
 
@@ -136,8 +140,6 @@ case class Repo(
   // lazy way of constructing https://github.com/submitgit/pretend-git/compare/7c597ef345aed345576de616c51f27e6f4b342b3...f90334356a304bc0acad01ab4fc64c49a3afd371
   def compareUrl(base: String, head: String) = s"$html_url/compare/$base...$head"
 }
-
-import com.madgag.scalagithub.GitHub._
 
 trait Reader[T] {
   implicit val readsT: Reads[T]
