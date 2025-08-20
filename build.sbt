@@ -3,9 +3,13 @@ import sbtversionpolicy.withsbtrelease.ReleaseVersion
 
 description := "Group of library code for Play, Git, and GitHub"
 
-ThisBuild / scalaVersion := "2.13.16"
+ThisBuild / scalaVersion := "3.3.6"
+ThisBuild / crossScalaVersions := Seq(
+  scalaVersion.value,
+  "2.13.16"
+)
 
-val scalaGitVersion = "6.0.0"
+val scalaGitVersion = "7.0.3"
 val scalaGitTest = "com.madgag.scala-git" %% "scala-git-test" % scalaGitVersion
 val scalaTest = "org.scalatest" %% "scalatest" % "3.2.19"
 
@@ -45,7 +49,7 @@ lazy val `play-git-hub-root` = (project in file(".")).aggregate(core, testkit).s
 )
 
 publish / skip := true
-releaseVersion := ReleaseVersion.fromAggregatedAssessedCompatibilityWithLatestRelease().value
+// releaseVersion := ReleaseVersion.fromAggregatedAssessedCompatibilityWithLatestRelease().value
 releaseProcess := Seq[ReleaseStep](
   checkSnapshotDependencies,
   inquireVersions,

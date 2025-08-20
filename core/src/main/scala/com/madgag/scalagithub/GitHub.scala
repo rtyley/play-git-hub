@@ -62,7 +62,7 @@ object GitHub {
   type FR[A] = Future[GitHubResponse[A]]
 
   implicit def jsonToRequestBody(json: JsValue): RequestBody =
-    RequestBody.create(JsonMediaType, json.toString)
+    RequestBody.create(json.toString, JsonMediaType)
 
   val JsonMediaType = MediaType.parse("application/json; charset=utf-8")
 

@@ -151,7 +151,7 @@ class CReader[T, ID](val link: Link[ID])(implicit override val readsT: Reads[T])
 
 class CCreator[T, ID, CC](val link: Link[ID])(
   implicit override val readsT: Reads[T],
-  implicit val writesCC: Writes[CC]
+  val writesCC: Writes[CC]
 ) extends CanCreate[T, ID, CC]
 
 trait CanGetAndCreate[T, ID, CC] extends CanCreate[T, ID, CC] with CanGet[T, ID]

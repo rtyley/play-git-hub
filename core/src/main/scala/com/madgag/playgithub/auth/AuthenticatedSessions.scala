@@ -34,7 +34,7 @@ object AuthenticatedSessions {
     val FromBasicAuth: Provider = _.headers.get("Authorization").map(_.split(' ')(1))
 
     def provider(providers: Provider*) = {
-      r : RequestHeader => providers.flatMap(_(r)).headOption
+      (r : RequestHeader) => providers.flatMap(_(r)).headOption
     }
   }
 
