@@ -19,6 +19,7 @@ package com.madgag.playgithub.testkit
 import cats.*
 import cats.effect.*
 import cats.effect.unsafe.implicits.global
+import com.madgag.git.test.unpackRepo
 import com.madgag.github.apps.{GitHubAppAuth, InstallationAccess}
 import com.madgag.scalagithub.AccountAccess
 import org.scalatest.OptionValues
@@ -27,6 +28,8 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should
 import org.scalatest.time.{Seconds, Span}
 
+import java.net.URL
+import java.nio.file.Path
 import scala.concurrent.ExecutionContext.Implicits.global
 
 class ToastRepoCreationTest extends AnyFlatSpec with should.Matchers with ScalaFutures with OptionValues {
@@ -45,10 +48,32 @@ class ToastRepoCreationTest extends AnyFlatSpec with should.Matchers with ScalaF
       "funky-times"
     )
 
+    val reps = 20
 
+    def quotaConsumedSoFar() = {
+      accountCredentials.gitHub.checkRateLimit().futureValue.value.quotaUpdate.consumed
+    }
+
+    val start = quotaConsumedSoFar()
     for (_ <- 1 to 20) {
-      toastRepoCreation.createTestRepo("/feature-branches.top-level-config.git.zip").unsafeToFuture().futureValue
+      val repoFilePath = "/bunk.git.zip"
+
+      val resource: URL = getClass.getResource(repoFilePath)
+      assert(resource != null, s"Resource for $repoFilePath is null.")
+
+      // ClassLoader.getSystemResource(repoFilePath)
+
+
+      val bo = Path.of(resource.toURI)
+      val localGitRepo = unpackRepo(bo)
+
+      toastRepoCreation.createTestRepo(localGitRepo).unsafeToFuture().futureValue
       println(accountCredentials.gitHub.checkRateLimit().futureValue.value.summary)
     }
+    val end = quotaConsumedSoFar()
+
+    val consumedOverRun = end - start
+    println(s"Consumed $consumedOverRun (${consumedOverRun.toFloat / reps}) per rep")
   }
+
 }

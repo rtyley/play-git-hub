@@ -122,7 +122,7 @@ object GitHub {
 }
 
 /**
- * A GitHub client holds a cache, but for an async loading cache to work, it also needs to asynchronously do both 
+ * A GitHub client holds a cache, but for an async loading cache to work, it also needs to asynchronously do both
  * fetching & parsing - so needs an execution context.
  */
 class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
@@ -141,6 +141,16 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
 //      .addHeader("X-GitHub-Api-Version", "2022-11-28")
   }
 
+  def addMoreAuth(builder: HttpRequest.Builder): Future[HttpRequest.Builder] = {
+    val credsF = ghCredentials()
+    for {
+      creds <- credsF
+    } yield builder.header("Authorization", s"Bearer ${creds.accessToken.value}")
+    //      .addHeader("Accept", "application/vnd.github+json")
+    //      .addHeader("X-GitHub-Api-Version", "2022-11-28")
+  }
+
+
   def executeAndWrap[T](settings: ReqMod)(processor: (Request, Response) => T): FR[T] = for {
     builderWithAuth <- addAuth(settings(new Builder()))
     request = builderWithAuth.build()
@@ -152,27 +162,28 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
   def executeAndReadJson[T: Reads](settings: ReqMod): FR[T] = executeAndWrap(settings) {
     case (req, response) => readAndResolve[T](req, response)
   }
-  
+
   val httpClient: HttpClient = HttpClient.newBuilder().build()
 
 
 
-  val fetching: Fetching[UrlAndParser, GitHubResponse[String]] = 
-    new HttpFetching[String](httpClient, BodyHandlers.ofString()).keyOn[UrlAndParser](_.url.uri).mapResponse {
+  val fetching: Fetching[UrlAndParser, GitHubResponse[String]] =
+    new HttpFetching[String](httpClient, BodyHandlers.ofString(), addMoreAuth).keyOn[UrlAndParser](_.url.uri).mapResponse {
       httpResp => GitHubResponse(ResponseMeta.from(httpResp), httpResp.body)
     }
 
 
   val cac: ETagCache[UrlAndParser, GitHubResponse[_]] = new ETagCache(
     fetching.thenParsingWithKey { (urlAndParser, response) =>
-      response.map(resp => urlAndParser.parser.reads(Json.parse(resp)))
+      response.map(resp => urlAndParser.parser.reads(Json.parse(resp)).get)
     },
     AlwaysWaitForRefreshedValue,
     _.expireAfterWrite(1.minutes)
   )
 
   def getAndCache[T: Reads](url: HttpUrl): FR[T] = 
-    cac.get(UrlAndParser(url, implicitly[Reads[T]])).map(_.get.asInstanceOf[GitHubResponse[T]])
+    // cac.get(UrlAndParser(url, implicitly[Reads[T]])).map(_.get.asInstanceOf[GitHubResponse[T]])
+    executeAndReadJson[T](_.url(url).withCaching)
 
   def create[CC : Writes, Res: Reads](url: HttpUrl, cc: CC)(implicit ec: EC) : FR[Res] =
     executeAndReadJson[Res](_.url(url).post(toJson(cc)))

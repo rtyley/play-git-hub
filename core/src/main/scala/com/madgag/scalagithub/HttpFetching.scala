@@ -18,38 +18,42 @@ package com.madgag.scalagithub
 
 import com.gu.etagcaching.Endo
 import com.gu.etagcaching.fetching.{ETaggedData, Fetching, Missing, MissingOrETagged}
-import com.madgag.scalagithub.GitHub.UrlAndParser
-import okhttp3.{HttpUrl, Response}
-import sourcecode.Text.generate
 
 import java.net.HttpURLConnection.{HTTP_NOT_FOUND, HTTP_NOT_MODIFIED}
 import java.net.URI
+import java.net.http.HttpResponse.BodyHandler
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
-import java.net.http.HttpResponse.{BodyHandler, BodyHandlers}
 import scala.concurrent.{Future, ExecutionContext as EC}
 import scala.jdk.FutureConverters.*
 
-class HttpFetching[T](httpClient: HttpClient, bodyHandler: BodyHandler[T])(implicit ec: EC) extends Fetching[URI, HttpResponse[T]] {
+class HttpFetching[T](
+  httpClient: HttpClient,
+  bodyHandler: BodyHandler[T],
+  generalRequestModifier: HttpRequest.Builder => Future[HttpRequest.Builder]
+)(implicit ec: EC) extends Fetching[URI, HttpResponse[T]] {
+
+  httpClient.authenticator()
 
   private def wrapWithETag(resp: HttpResponse[T]): ETaggedData[HttpResponse[T]] = {
     val eTag = resp.headers().firstValue("ETag").get() // ? we're assuming that all responses will have an ETag...
     ETaggedData(eTag, resp)
   }
-  
+
   private def performFetch(
     resourceId: URI,
     reqModifier: Endo[HttpRequest.Builder] = identity,
-  ): Future[HttpResponse[T]] = {
-    val request = reqModifier(HttpRequest.newBuilder().uri(resourceId)).build()
-    httpClient.sendAsync(request, bodyHandler).asScala
-  }
-  
-  private def missingOrETagged(resp: HttpResponse[T]) = 
+  ): Future[HttpResponse[T]] = for {
+    reqBase <- generalRequestModifier(HttpRequest.newBuilder())
+    request = reqModifier(reqBase.uri(resourceId)).build()
+    resp <- httpClient.sendAsync(request, bodyHandler).asScala
+  } yield resp
+
+  private def missingOrETagged(resp: HttpResponse[T]) =
     if (resp.statusCode == HTTP_NOT_FOUND) Missing else wrapWithETag(resp)
 
   def fetch(key: URI): Future[MissingOrETagged[HttpResponse[T]]] = performFetch(key).map(missingOrETagged)
 
-  def fetchOnlyIfETagChanged(key: URI, eTag: String): Future[Option[MissingOrETagged[HttpResponse[T]]]] = 
+  def fetchOnlyIfETagChanged(key: URI, eTag: String): Future[Option[MissingOrETagged[HttpResponse[T]]]] =
     performFetch(key, _.header("If-None-Match", eTag)).map { resp =>
       Option.when(resp.statusCode != HTTP_NOT_MODIFIED)(missingOrETagged(resp))
     }

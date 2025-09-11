@@ -41,14 +41,13 @@ import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.*
 
 class ToastRepoCreation(
-  testFixtureAccountCredentials: AccountAccess,
+  testFixtureAccountAccess: AccountAccess,
   testRepoNamePrefix: String
 ) {
-  given credsProvider: GitHubCredentials.Provider = testFixtureAccountCredentials.credentials
-  given gitHub: GitHub = testFixtureAccountCredentials.gitHub
+  given credsProvider: GitHubCredentials.Provider = testFixtureAccountAccess.credentials
+  given gitHub: GitHub = testFixtureAccountAccess.gitHub
 
-  def createTestRepo(fileName: String)(implicit ec: ExecutionContext): IO[Repo] = {
-    val localGitRepo = unpackRepo(fileName)
+  def createTestRepo(localGitRepo: FileRepository)(implicit ec: ExecutionContext): IO[Repo] = {
     for {
       testGithubRepo <- createBlankGitHubRepo()
       _ <- pushLocalRepoToGitHub(localGitRepo, testGithubRepo) >>
@@ -58,7 +57,7 @@ class ToastRepoCreation(
   }
 
   private def createBlankGitHubRepo()(implicit ec: ExecutionContext): IO[Repo] = IO.fromFuture(IO(for {
-    testRepoId <- testFixtureAccountCredentials.account.createRepo(CreateRepo(
+    testRepoId <- testFixtureAccountAccess.account.createRepo(CreateRepo(
       name = testRepoNamePrefix + System.currentTimeMillis().toString,
       `private` = false
     )).map(_.repoId)

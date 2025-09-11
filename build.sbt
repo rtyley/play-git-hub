@@ -5,7 +5,7 @@ description := "Group of library code for Play, Git, and GitHub"
 
 ThisBuild / scalaVersion := "3.3.6"
 
-val scalaGitVersion = "7.0.3"
+val scalaGitVersion = "7.0.4-SNAPSHOT"
 val scalaGitTest = "com.madgag.scala-git" %% "scala-git-test" % scalaGitVersion
 val scalaTest = "org.scalatest" %% "scalatest" % "3.2.19"
 
