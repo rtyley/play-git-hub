@@ -16,16 +16,18 @@
 
 package com.madgag.playgithub.auth
 
+import cats.effect.IO
 import com.madgag.github.GitHubAuthResponse
-import com.madgag.okhttpscala._
+import com.madgag.okhttpscala.*
 import com.madgag.playgithub.auth.AuthenticatedSessions.AccessToken
 import com.madgag.scalagithub.{GitHub, GitHubCredentials}
 import okhttp3.OkHttpClient
 import play.api.libs.json.Json
-import play.api.mvc._
+import play.api.mvc.*
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
+import cats.effect.implicits._
 
 trait AuthController extends BaseController {
 
@@ -44,24 +46,23 @@ trait AuthController extends BaseController {
       .post(EmptyRequestBody)
       .build()
 
-    for {
-      accessToken <- client.execute(accessTokenRequest) { response =>
+    (for {
+      accessToken <- IO.fromFuture(IO(client.execute(accessTokenRequest) { response =>
         Json.parse(response.body.byteStream()).validate[GitHubAuthResponse].get.access_token
-      }
-      userResponse <- new GitHub(() => Future.successful(GitHubCredentials(com.madgag.github.AccessToken(accessToken)))).getUser()
+      }))
+      userResponse <- new GitHub(() => IO.pure(GitHubCredentials(com.madgag.github.AccessToken(accessToken)))).getUser()
     } yield {
       val user = userResponse.result
       Redirect(req.session.get(AuthenticatedSessions.RedirectToPathAfterAuthKey).getOrElse(defaultPage)).withSession(
         AccessToken.SessionKey -> accessToken,
         MinimalGHPerson(user.login, user.avatar_url).sessionTuple
       )
-    }
+    }).unsafeToFuture()(cats.effect.unsafe.implicits.global)
   }
 
   def logout: Action[AnyContent] = Action {
     Redirect(defaultPage).withNewSession
   }
 }
-
 
 

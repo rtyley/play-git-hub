@@ -39,7 +39,7 @@ case class User(
 
   override def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: EC): FR[Repo] = github.createRepo(cr)
 
-  override def listRepos()(implicit github: GitHub, ec: EC): Source[Seq[Repo], NotUsed] =
+  override def listRepos()(implicit github: GitHub, ec: EC): ListStream[Repo] =
     github.listRepos("updated", "desc")
 }
 

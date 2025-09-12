@@ -17,15 +17,15 @@
 package com.madgag.scalagithub.model
 
 import com.madgag.scalagithub.GitHub
-import com.madgag.scalagithub.GitHub.FR
-import com.madgag.scalagithub.commands._
+import com.madgag.scalagithub.GitHub.{FR, ListStream}
+import com.madgag.scalagithub.commands.*
 import okhttp3.HttpUrl
 import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.scaladsl.Source
 import play.api.libs.json.{Json, Reads, Writes}
 
 import java.time.ZonedDateTime
-import scala.concurrent.{ExecutionContext => EC}
+import scala.concurrent.ExecutionContext as EC
 import org.eclipse.jgit
 
 object RepoId {
@@ -179,10 +179,10 @@ trait CanList[T, ID] extends Reader[T] {
 
   val link: Link[ID]
 
-  def list(params: Map[String, String] = Map.empty)(implicit g: GitHub, ec: EC): Source[Seq[T],NotUsed] = {
+  def list(params: Map[String, String] = Map.empty)(implicit g: GitHub, ec: EC): ListStream[T] = {
     val initialUrl = HttpUrl.parse(link.listUrl).newBuilder()
     params.foreach { case (k, v) => initialUrl.addQueryParameter(k, v) }
-    g.followAndEnumerate[Seq[T]](initialUrl.build())
+    g.followAndEnumerate[T](initialUrl.build())
   }
 }
 

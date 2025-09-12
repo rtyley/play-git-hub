@@ -17,28 +17,39 @@
 package com.madgag.playgithub.testkit
 
 import cats.*
+import cats.data.*
 import cats.effect.{IO, Temporal}
+import cats.implicits.*
 import cats.syntax.all.*
 import com.madgag.git.*
-import com.madgag.git.test.unpackRepo
+import com.madgag.github.Implicits.*
+import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.commands.CreateRepo
 import com.madgag.scalagithub.model.Repo
-import com.madgag.scalagithub.{AccountAccess, GitHub, GitHubCredentials}
+import com.madgag.scalagithub.{AccountAccess, GitHub, GitHubCredentials, GitHubResponse, model}
+import com.madgag.time.Implicits.*
 import org.eclipse.jgit.api.{CloneCommand, Git}
 import org.eclipse.jgit.internal.storage.file.FileRepository
 import org.eclipse.jgit.lib.*
-import org.eclipse.jgit.lib.Constants.{HEAD, R_HEADS}
+import org.eclipse.jgit.lib.Constants.HEAD
 import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.scalatest.matchers.should.Matchers.all
 import retry.ResultHandler.retryOnAllErrors
 import retry.RetryPolicies.{fullJitter, limitRetries, limitRetriesByCumulativeDelay}
 import retry.syntax.*
-import retry.{ResultHandler, RetryPolicies}
+import retry.*
 
 import java.nio.file.Files.createTempDirectory
-import scala.concurrent.ExecutionContext
+import java.time.Duration.ofMinutes
 import scala.concurrent.duration.DurationInt
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
+import cats.syntax.all.*
+import cats.data.*
+import cats.effect.{IO, IOApp}
+import cats.syntax.all.*
+import com.madgag.scalagithub
+
 
 class ToastRepoCreation(
   testFixtureAccountAccess: AccountAccess,
@@ -47,26 +58,35 @@ class ToastRepoCreation(
   given credsProvider: GitHubCredentials.Provider = testFixtureAccountAccess.credentials
   given gitHub: GitHub = testFixtureAccountAccess.gitHub
 
+  val retryPolicy: RetryPolicy[IO, Throwable] = limitRetriesByCumulativeDelay(70.seconds, fullJitter(1.seconds))
+
   def createTestRepo(localGitRepo: FileRepository)(implicit ec: ExecutionContext): IO[Repo] = {
     for {
       testGithubRepo <- createBlankGitHubRepo()
       _ <- pushLocalRepoToGitHub(localGitRepo, testGithubRepo) >>
-        Temporal[IO].sleep(2.seconds) >> // pause so we don't immediately cache results before the GitHub API catches up
+        Temporal[IO].sleep(1500.milli) >> // pause to allow the GitHub API to catch up - reduces retries
         validateGitHubAPISuccessfullyRepresentsLocalRepo(testGithubRepo, localGitRepo.getRefDatabase)
     } yield testGithubRepo
   }
 
-  private def createBlankGitHubRepo()(implicit ec: ExecutionContext): IO[Repo] = IO.fromFuture(IO(for {
+  def isOldTestRepo(repo: Repo): Boolean =
+    repo.name.startsWith(testRepoNamePrefix) && repo.created_at.toInstant.age() > ofMinutes(30)
+
+  def deleteTestRepos()(implicit ec: ExecutionContext): IO[Unit] = gitHub
+    .listRepos(sort = "created", direction = "asc").filter(isOldTestRepo)
+    .parEvalMapUnordered(4)(_.delete(): IO[_]).compile.drain
+
+  private def createBlankGitHubRepo()(implicit ec: ExecutionContext): IO[Repo] = for {
     testRepoId <- testFixtureAccountAccess.account.createRepo(CreateRepo(
       name = testRepoNamePrefix + System.currentTimeMillis().toString,
       `private` = false
-    )).map(_.repoId)
+    )).map(_.result.repoId)
     testGithubRepo <- gitHub.getRepo(testRepoId)
-  } yield testGithubRepo))
+  } yield testGithubRepo.result
 
   private def pushLocalRepoToGitHub(
     localGitRepo: FileRepository, testGithubRepo: Repo
-  )(implicit ec: ExecutionContext): IO[Unit] = IO.fromFuture(IO(for {
+  )(implicit ec: ExecutionContext): IO[Unit] = for {
     creds <- credsProvider()
   } yield {
     configLocalRepoToPushToGitHubRepo(localGitRepo, testGithubRepo)
@@ -75,7 +95,7 @@ class ToastRepoCreation(
     pushResults.asScala.foreach { pushResult =>
       all(pushResult.getRemoteUpdates.asScala.map(_.getStatus)) shouldBe RemoteRefUpdate.Status.OK
     }
-  }))
+  }
 
   private def configLocalRepoToPushToGitHubRepo(localGitRepo: FileRepository, testGithubRepo: Repo): Unit = {
     val config = localGitRepo.getConfig
@@ -97,14 +117,9 @@ class ToastRepoCreation(
   } yield ()
 
   private def validateGitHubAPIGives(expectedRefs: RefDatabase, testGitHubRepo: Repo)(using ExecutionContext) = {
-    val branchRefs: Seq[Ref] = expectedRefs.branchRefs
-
-    // Option[(Ref, RefProblem)] give first ref that failed (after retries)
-    IO.traverse(branchRefs) { branchRef =>
-      getRefDataFromGitHubApi(testGitHubRepo, branchRef)
-        .map(_.result.objectId).map { a =>
+    IO.traverse(expectedRefs.branchRefs) { branchRef =>
+      getRefDataFromGitHubApi(testGitHubRepo, branchRef).map(_.result.objectId).map { a =>
           require(a.toObjectId == branchRef.getObjectId, s"${a.toObjectId} IS NOT ${branchRef.getObjectId}")
-          //branchRef -> a.fold[Option[RefProblem]](t => Some(ErrorGettingRef(t)), b => Option.when(b != branchRef.getObjectId)(WrongValue(b)))
         }
     }
   }
@@ -117,17 +132,23 @@ class ToastRepoCreation(
     require(actualId == expectedId, s"actualId=$actualId expectedId=$expectedId")
   }
 
-  private def getRefDataFromGitHubApi(testGithubRepo: Repo, branchRef: Ref)(using ExecutionContext, GitHub) =
-    IO.fromFuture(IO(testGithubRepo.refs.get(branchRef)))
-      .retryingOnErrors(limitRetriesByCumulativeDelay(70.seconds, fullJitter(1.seconds)), retryOnAllErrors(log = (x, y) =>
-        IO(println(s"retrying get ${branchRef.getName} - delay so far=${y.cumulativeDelay.toSeconds}s"))))
+  private def getRefDataFromGitHubApi(testGithubRepo: Repo, branchRef: Ref)(using ExecutionContext, GitHub): FR[model.Ref] = {
+    val foo: FR[model.Ref] = testGithubRepo.refs.get(branchRef)
+
+    type G = GitHubResponse[model.Ref]
+
+    (foo: IO[GitHubResponse[model.Ref]]).retryingOnErrors(retryPolicy, retryOnAllErrors(logRetry(s"get ${branchRef.getName}")))
+  }
+
+  private def logRetry(detail: String): (Throwable, RetryDetails) => IO[Unit] = (_, retryDetails) =>
+    IO(println(s"retrying '$detail' - delay so far=${retryDetails.cumulativeDelay.toSeconds}s"))
 
   private def performCloneOf(githubRepo: Repo): IO[Repository] = for {
-    creds <- IO.fromFuture(IO(credsProvider()))
+    creds <- credsProvider()
     clonedRepo <- IO.blocking {
       creds.applyAuthTo[CloneCommand, Git](Git.cloneRepository()).setBare(true).setURI(githubRepo.clone_url)
         .setDirectory(createTempDirectory("test-repo").toFile).call().getRepository
-    }.retryingOnErrors(limitRetries[IO](5), retryOnAllErrors(log = ResultHandler.noop))
+    }.retryingOnErrors(retryPolicy, retryOnAllErrors(logRetry(s"clone ${githubRepo.clone_url}")))
   } yield clonedRepo
 }
 

@@ -17,7 +17,7 @@
 package com.madgag.scalagithub.model
 
 import com.madgag.scalagithub.GitHub
-import com.madgag.scalagithub.GitHub.FR
+import com.madgag.scalagithub.GitHub.{FR, ListStream}
 import com.madgag.scalagithub.commands.CreateRepo
 import okhttp3.HttpUrl
 import org.apache.pekko.NotUsed
@@ -25,7 +25,7 @@ import org.apache.pekko.stream.scaladsl.Source
 import play.api.libs.json.Reads
 
 import java.time.ZonedDateTime
-import scala.concurrent.{ExecutionContext => EC}
+import scala.concurrent.ExecutionContext as EC
 
 trait Account {
   type Self <: Account
@@ -45,7 +45,7 @@ trait Account {
 
   def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: EC): FR[Repo]
 
-  def listRepos()(implicit github: GitHub, ec: EC): Source[Seq[Repo], NotUsed]
+  def listRepos()(implicit github: GitHub, ec: EC): ListStream[Repo]
 }
 
 object Account {

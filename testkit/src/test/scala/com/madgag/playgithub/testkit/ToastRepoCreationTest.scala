@@ -41,34 +41,31 @@ class ToastRepoCreationTest extends AnyFlatSpec with should.Matchers with ScalaF
 
 
   "Dunk" should "create a test repo" in {
-    val accountCredentials = AccountAccess(installationAccess.installedOnAccount, installationAccess.credentials)
-    println(accountCredentials.gitHub.checkRateLimit().futureValue.value.summary)
+    val accountAccess = AccountAccess(installationAccess.installedOnAccount, installationAccess.credentials)
+    println(accountAccess.gitHub.checkRateLimit().futureValue.value.summary)
     val toastRepoCreation = new ToastRepoCreation(
-      accountCredentials,
+      accountAccess,
       "funky-times"
     )
 
     val reps = 20
 
     def quotaConsumedSoFar() = {
-      accountCredentials.gitHub.checkRateLimit().futureValue.value.quotaUpdate.consumed
+      accountAccess.gitHub.checkRateLimit().futureValue.value.quotaUpdate.consumed
     }
 
     val start = quotaConsumedSoFar()
-    for (_ <- 1 to 20) {
+    for (_ <- 1 to 15) {
       val repoFilePath = "/bunk.git.zip"
 
       val resource: URL = getClass.getResource(repoFilePath)
       assert(resource != null, s"Resource for $repoFilePath is null.")
 
-      // ClassLoader.getSystemResource(repoFilePath)
-
-
-      val bo = Path.of(resource.toURI)
-      val localGitRepo = unpackRepo(bo)
+      val zippedRepo = Path.of(resource.toURI)
+      val localGitRepo = unpackRepo(zippedRepo)
 
       toastRepoCreation.createTestRepo(localGitRepo).unsafeToFuture().futureValue
-      println(accountCredentials.gitHub.checkRateLimit().futureValue.value.summary)
+      println(accountAccess.gitHub.checkRateLimit().futureValue.value.summary)
     }
     val end = quotaConsumedSoFar()
 

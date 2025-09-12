@@ -16,6 +16,7 @@
 
 package com.madgag.github
 
+import cats.effect.IO
 import com.github.blemale.scaffeine.{AsyncLoadingCache, Scaffeine}
 import com.madgag.github.AccessToken.Cache.timeUntilNearExpirationOf
 import com.madgag.scalagithub.GitHubCredentials
@@ -25,7 +26,7 @@ import java.time.Clock.systemUTC
 import java.time.{Clock, Duration, Instant}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
-import scala.jdk.DurationConverters._
+import scala.jdk.DurationConverters.*
 
 case class AccessToken(value: String) extends AnyVal
 
@@ -44,7 +45,7 @@ object AccessToken {
       )
       .buildAsyncFuture(_ => provider().map(_.map(GitHubCredentials(_))))
 
-    override def apply(): Future[GitHubCredentials] = cache.get(()).map(_.value)
+    override def apply(): IO[GitHubCredentials] = IO.fromFuture(IO(cache.get(()).map(_.value)))
   }
 
   object Cache {

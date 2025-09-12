@@ -16,31 +16,30 @@
 
 package com.madgag.scalagithub
 
+import cats.effect.IO
 import com.gu.etagcaching.FreshnessPolicy.AlwaysWaitForRefreshedValue
-import com.gu.etagcaching.fetching.{Fetching, MissingOrETagged}
-import com.gu.etagcaching.{ConfigCache, ETagCache, Endo, FreshnessPolicy, Loading}
+import com.gu.etagcaching.fetching.Fetching
+import com.gu.etagcaching.{ETagCache, FreshnessPolicy}
 import com.madgag.okhttpscala.*
 import com.madgag.ratelimitstatus.RateLimit
 import com.madgag.scalagithub.ResponseMeta.RichHeaders
 import com.madgag.scalagithub.commands.*
 import com.madgag.scalagithub.model.*
-import okhttp3.Request.Builder
+import fs2.Chunk
+import fs2.Stream.unfoldChunkLoopEval
 import okhttp3.*
-import org.apache.pekko.NotUsed
-import org.apache.pekko.stream.scaladsl.Source
+import okhttp3.Request.Builder
 import play.api.Logger
 import play.api.http.Status
-import play.api.libs.json.Json.toJson
 import play.api.libs.json.*
-import sourcecode.Text.generate
+import play.api.libs.json.Json.toJson
 
 import java.net.http.HttpResponse.BodyHandlers
 import java.net.http.{HttpClient, HttpRequest}
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit.SECONDS
+import scala.concurrent.ExecutionContext as EC
 import scala.concurrent.duration.*
-import scala.concurrent.{Future, ExecutionContext as EC}
-import scala.jdk.FutureConverters.CompletionStageOps
 import scala.language.implicitConversions
 
 case class Quota(
@@ -63,14 +62,14 @@ case class GitHubResponse[Result](
 }
 
 object GitHubResponse {
-  implicit def toResult[Result](resp: GitHubResponse[Result]): Result = resp.result
+  // implicit def toResult[Result](resp: GitHubResponse[Result]): Result = resp.result
 }
 
 object GitHub {
 
   val logger = Logger(getClass)
 
-  type FR[A] = Future[GitHubResponse[A]]
+  type FR[A] = IO[GitHubResponse[A]]
 
   implicit def jsonToRequestBody(json: JsValue): RequestBody =
     RequestBody.create(json.toString, JsonMediaType)
@@ -112,6 +111,8 @@ object GitHub {
 
   type ReqMod = Builder => Builder
 
+  type ListStream[T] = fs2.Stream[IO, T]
+
   def apiUrlBuilder: HttpUrl.Builder = new HttpUrl.Builder().scheme("https").host("api.github.com")
 
   def path(segments: String*): HttpUrl = segments.foldLeft(apiUrlBuilder) { case (builder, segment) =>
@@ -126,13 +127,13 @@ object GitHub {
  * fetching & parsing - so needs an execution context.
  */
 class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
-  import GitHub._
+  import GitHub.*
 
   val okHttpClient = new OkHttpClient.Builder()
-    // .cache(new okhttp3.Cache(Files.createTempDirectory("github-api-cache").toFile, 5 * 1024 * 1024))
+    .cache(new okhttp3.Cache(Files.createTempDirectory("github-api-cache").toFile, 5 * 1024 * 1024))
     .build()
 
-  def addAuth(builder: Builder): Future[Builder] = {
+  def addAuth(builder: Builder): IO[Builder] = {
     val credsF = ghCredentials()
     for {
       creds <- credsF
@@ -141,7 +142,7 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
 //      .addHeader("X-GitHub-Api-Version", "2022-11-28")
   }
 
-  def addMoreAuth(builder: HttpRequest.Builder): Future[HttpRequest.Builder] = {
+  def addMoreAuth(builder: HttpRequest.Builder): IO[HttpRequest.Builder] = {
     val credsF = ghCredentials()
     for {
       creds <- credsF
@@ -154,9 +155,9 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
   def executeAndWrap[T](settings: ReqMod)(processor: (Request, Response) => T): FR[T] = for {
     builderWithAuth <- addAuth(settings(new Builder()))
     request = builderWithAuth.build()
-    response <- okHttpClient.execute(request) {
+    response <- IO.fromFuture(IO(okHttpClient.execute(request) {
       resp => GitHubResponse(logAndGetMeta(request, resp), processor(request, resp))
-    }
+    }))
   } yield response
 
   def executeAndReadJson[T: Reads](settings: ReqMod): FR[T] = executeAndWrap(settings) {
@@ -168,12 +169,15 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
 
 
   val fetching: Fetching[UrlAndParser, GitHubResponse[String]] =
-    new HttpFetching[String](httpClient, BodyHandlers.ofString(), addMoreAuth).keyOn[UrlAndParser](_.url.uri).mapResponse {
+    new HttpFetching[String](
+      httpClient,
+      BodyHandlers.ofString(),
+      addMoreAuth(_).unsafeToFuture()(cats.effect.unsafe.implicits.global)
+    ).keyOn[UrlAndParser](_.url.uri).mapResponse {
       httpResp => GitHubResponse(ResponseMeta.from(httpResp), httpResp.body)
     }
 
-
-  val cac: ETagCache[UrlAndParser, GitHubResponse[_]] = new ETagCache(
+  val etagCache: ETagCache[UrlAndParser, GitHubResponse[_]] = new ETagCache(
     fetching.thenParsingWithKey { (urlAndParser, response) =>
       response.map(resp => urlAndParser.parser.reads(Json.parse(resp)).get)
     },
@@ -182,8 +186,8 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
   )
 
   def getAndCache[T: Reads](url: HttpUrl): FR[T] = 
-    // cac.get(UrlAndParser(url, implicitly[Reads[T]])).map(_.get.asInstanceOf[GitHubResponse[T]])
-    executeAndReadJson[T](_.url(url).withCaching)
+    IO.fromFuture(IO(etagCache.get(UrlAndParser(url, implicitly[Reads[T]])).map(_.get.asInstanceOf[GitHubResponse[T]])))
+    // executeAndReadJson[T](_.url(url).withCaching)
 
   def create[CC : Writes, Res: Reads](url: HttpUrl, cc: CC)(implicit ec: EC) : FR[Res] =
     executeAndReadJson[Res](_.url(url).post(toJson(cc)))
@@ -209,9 +213,9 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
    * Note that actually, accessing this endpoint does not count against your REST API rate limit, so the
    * ResponseMeta.Quota would be misleading.
    */
-  def checkRateLimit(): Future[Option[RateLimit.Status]] = for {
+  def checkRateLimit(): IO[Option[RateLimit.Status]] = for {
     builderWithAuth <- addAuth(new Builder().url(path("rate_limit")))
-    resp <- okHttpClient.execute(builderWithAuth.build())(identity)
+    resp <- IO.fromFuture(IO(okHttpClient.execute(builderWithAuth.build())(identity)))
   } yield ResponseMeta.rateLimitStatusFrom(resp.headers.toJdkHeaders)
 
   /**
@@ -256,35 +260,32 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
   def getTreeRecursively(repo: Repo, sha: String): FR[Tree] =
     getAndCache(HttpUrl.get(repo.trees.urlFor(sha)+"?recursive=1"))
 
-  def followAndEnumerate[T](url: HttpUrl)(implicit ev: Reads[T], ec: EC): Source[T, NotUsed] = Source.unfoldAsync[Option[HttpUrl],T](Some(url)) {
-    case Some(nextUrl) =>
-      logger.debug(s"Following $nextUrl")
-      for {
-        response <- getAndCache[T](nextUrl)
-      } yield Some(response.responseMeta.nextOpt -> response.result)
-    case None => Future.successful(None)
-  }
+  def followAndEnumerate[T: Reads](url: HttpUrl): ListStream[T] = punk[Seq[T], T](url)(Chunk.from)
+
+  def followAndEnumerateChunky[C: Reads](url: HttpUrl): ListStream[C] = punk[C, C](url)(Chunk.singleton)
+
+  def punk[S: Reads, T](url: HttpUrl)(f: S => Chunk[T]) =
+    unfoldChunkLoopEval(url)(getAndCache[S](_).map(resp => (f(resp.result), resp.responseMeta.nextOpt)))
 
   /**
    * [[https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-repositories-for-the-authenticated-user]]
    * GET /user/repos
    */
-  def listRepos(sort: String, direction: String): Source[Seq[Repo], NotUsed] =
-    followAndEnumerate[Seq[Repo]](path("user", "repos"))
+  def listRepos(sort: String, direction: String): ListStream[Repo] = followAndEnumerate[Repo](path("user", "repos"))
 
   /**
    * [[https://docs.github.com/en/rest/apps/installations?apiVersion=2022-11-28#list-repositories-accessible-to-the-app-installation]]
    * GET /installation/repositories
    */
-  def listReposAccessibleToTheApp(): Source[InstallationRepos, NotUsed] =
-    followAndEnumerate[InstallationRepos](path("installation", "repositories"))
+  def listReposAccessibleToTheApp(): ListStream[InstallationRepos] =
+    followAndEnumerateChunky[InstallationRepos](path("installation", "repositories"))
 
   /**
    * [[https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-organization-repositories]]
    * GET /orgs/{org}/repos
    */
-  def listOrgRepos(org: String, sort: String, direction: String): Source[Seq[Repo], NotUsed] =
-    followAndEnumerate[Seq[Repo]](path("orgs", org, "repos"))
+  def listOrgRepos(org: String, sort: String, direction: String): ListStream[Repo] =
+    followAndEnumerate[Repo](path("orgs", org, "repos"))
 
   /**
    * https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user
@@ -296,31 +297,26 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
   /**
     * https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#list-teams-for-the-authenticated-user
     * GET /user/teams
-    * TODO Pagination: https://developer.github.com/guides/traversing-with-pagination/
     */
-  def getUserTeams(): FR[Seq[Team]] = getAndCache(path("user", "teams"))
+  def getUserTeams(): ListStream[Team] = followAndEnumerate(path("user", "teams"))
 
   /**
     * https://docs.github.com/en/rest/users/emails?apiVersion=2022-11-28#list-email-addresses-for-the-authenticated-user
     * GET /user/emails
-    * TODO Pagination: https://developer.github.com/guides/traversing-with-pagination/
     */
-  def getUserEmails(): FR[Seq[Email]] = getAndCache(path("user", "emails"))
+  def getUserEmails(): ListStream[Email] = followAndEnumerate(path("user", "emails"))
 
   /**
-    * https://docs.github.com/en/rest/repos/webhooks?apiVersion=2022-11-28#list-hooks
+    * https://docs.github.com/en/rest/repos/webhooks?apiVersion=2022-11-28#list-repository-webhooks
     * GET /repos/{owner}/{repo}/hooks
-    * TODO Pagination: https://developer.github.com/guides/traversing-with-pagination/
     */
-  def listHooks(repo: RepoId): FR[Seq[Hook]] =
-    getAndCache(path("repos", repo.owner, repo.name, "hooks"))
+  def listHooks(repo: RepoId): ListStream[Hook] = followAndEnumerate(path("repos", repo.owner, repo.name, "hooks"))
 
   /**
-   * https://docs.github.com/en/rest/repos/webhooks?apiVersion=2022-11-28#list-hooks
+   * https://docs.github.com/en/rest/repos/webhooks?apiVersion=2022-11-28#list-repository-webhooks
    * GET /repos/{owner}/{repo}/hooks
-   * TODO Pagination: https://developer.github.com/guides/traversing-with-pagination/
    */
-  def listHooks(repo: Repo): FR[Seq[Hook]] = getAndCache(HttpUrl.get(repo.hooks_url))
+  def listHooks(repo: Repo): ListStream[Hook] = followAndEnumerate(HttpUrl.get(repo.hooks_url))
 
   /**
     * https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#get-a-team-legacy
@@ -370,8 +366,8 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
    * https://docs.github.com/en/rest/teams/members?apiVersion=2022-11-28#list-team-members
    * GET /orgs/{org}/teams/{team_slug}/members
    */
-  def listTeamMembers(org: String, teamSlug: String): Source[Seq[User],NotUsed] =
-    followAndEnumerate[Seq[User]](path("orgs", org, "teams", teamSlug, "members"))
+  def listTeamMembers(org: String, teamSlug: String): ListStream[User] =
+    followAndEnumerate[User](path("orgs", org, "teams", teamSlug, "members"))
 
   /**
     * https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#add-or-update-team-repository-permissions-legacy
