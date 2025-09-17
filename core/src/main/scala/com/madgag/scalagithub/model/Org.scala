@@ -85,8 +85,8 @@ case class Org(
   override def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: ExecutionContext): FR[Repo] =
     github.createOrgRepo(login, cr)
 
-  override def listRepos()(implicit github: GitHub, ec: ExecutionContext): ListStream[Repo] =
-    github.listOrgRepos(login,"updated", "desc")
+  override def listRepos(queryParams: (String, String)*)(using github: GitHub): ListStream[Repo] =
+    github.listOrgRepos(login, queryParams*)
 }
 
 object Org {

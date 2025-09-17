@@ -18,59 +18,57 @@ package com.madgag.playgithub.testkit
 
 import cats.*
 import cats.effect.*
-import cats.effect.unsafe.implicits.global
-import com.madgag.git.test.unpackRepo
+import cats.effect.testing.scalatest.AsyncIOSpec
+import com.madgag.git.test.pathForResource
 import com.madgag.github.apps.{GitHubAppAuth, InstallationAccess}
+import com.madgag.scala.collection.decorators.*
 import com.madgag.scalagithub.AccountAccess
 import org.scalatest.OptionValues
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should
 import org.scalatest.time.{Seconds, Span}
 
-import java.net.URL
-import java.nio.file.Path
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.ExecutionContext
 
-class ToastRepoCreationTest extends AnyFlatSpec with should.Matchers with ScalaFutures with OptionValues {
+class ToastRepoCreationTest extends AsyncFlatSpec with AsyncIOSpec with should.Matchers with ScalaFutures with OptionValues {
+
+  implicit override def executionContext: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
+
   implicit override val patienceConfig: PatienceConfig =
     PatienceConfig(timeout = scaled(Span(90, Seconds)), interval = scaled(Span(2, Seconds)))
 
   val installationAccess: InstallationAccess =
     GitHubAppAuth.fromConfigMap(sys.env, prefix = "PLAY_GIT_HUB_TEST").accessSoleInstallation().futureValue
 
+  val accountAccess = AccountAccess(installationAccess.installedOnAccount, installationAccess.credentials)
 
-  "Dunk" should "create a test repo" in {
-    val accountAccess = AccountAccess(installationAccess.installedOnAccount, installationAccess.credentials)
-    println(accountAccess.gitHub.checkRateLimit().futureValue.value.summary)
-    val toastRepoCreation = new ToastRepoCreation(
-      accountAccess,
-      "funky-times"
-    )
+  val toastRepoCreation = new ToastRepoCreation(
+    accountAccess,
+    "funky-times"
+  )
 
-    val reps = 20
-
-    def quotaConsumedSoFar() = {
-      accountAccess.gitHub.checkRateLimit().futureValue.value.quotaUpdate.consumed
+  it should "reliably create test repos" in {
+    for {
+      startConsumption <- accountAccess.gitHub.checkRateLimit().map(_.value.quotaUpdate.consumed)
+      reps = 35
+      duration <- toastRepoCreation.createTestRepo(pathForResource("/bunk.git.zip", getClass)).parReplicateA_(reps).timed.map(_._1)
+      endConsumption <- accountAccess.gitHub.checkRateLimit().map(_.value.quotaUpdate.consumed)
+    } yield {
+      val consumedOverRun = endConsumption - startConsumption
+      val consumedPerRep = consumedOverRun.toFloat / reps
+      println(f"Consumed $consumedOverRun in ${duration.toMillis}ms - $consumedPerRep%.1f per rep")
+      consumedPerRep should be <= 8f
     }
+  }
 
-    val start = quotaConsumedSoFar()
-    for (_ <- 1 to 15) {
-      val repoFilePath = "/bunk.git.zip"
-
-      val resource: URL = getClass.getResource(repoFilePath)
-      assert(resource != null, s"Resource for $repoFilePath is null.")
-
-      val zippedRepo = Path.of(resource.toURI)
-      val localGitRepo = unpackRepo(zippedRepo)
-
-      toastRepoCreation.createTestRepo(localGitRepo).unsafeToFuture().futureValue
-      println(accountAccess.gitHub.checkRateLimit().futureValue.value.summary)
+  it should "delete old test repos" in {
+    for {
+      result <- toastRepoCreation.deleteTestRepos()
+    } yield {
+      println(result.mapV(_.map(_.url).mkString(", ")))
+      1 shouldBe 1
     }
-    val end = quotaConsumedSoFar()
-
-    val consumedOverRun = end - start
-    println(s"Consumed $consumedOverRun (${consumedOverRun.toFloat / reps}) per rep")
   }
 
 }

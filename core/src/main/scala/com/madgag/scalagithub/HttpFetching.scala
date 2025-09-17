@@ -25,6 +25,7 @@ import java.net.http.HttpResponse.BodyHandler
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import scala.concurrent.{Future, ExecutionContext as EC}
 import scala.jdk.FutureConverters.*
+import scala.jdk.OptionConverters._
 
 class HttpFetching[T](
   httpClient: HttpClient,
@@ -35,7 +36,12 @@ class HttpFetching[T](
   httpClient.authenticator()
 
   private def wrapWithETag(resp: HttpResponse[T]): ETaggedData[HttpResponse[T]] = {
-    val eTag = resp.headers().firstValue("ETag").get() // ? we're assuming that all responses will have an ETag...
+    val optETag = resp.headers().firstValue("ETag").toScala
+    if (optETag.isEmpty) {
+      println(resp.statusCode())
+      println(s"${resp.request().uri()} ${resp.body()}")
+    }
+    val eTag = optETag.get // ? we're assuming that all responses will have an ETag...
     ETaggedData(eTag, resp)
   }
 

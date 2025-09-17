@@ -118,6 +118,15 @@ object GitHub {
   def path(segments: String*): HttpUrl = segments.foldLeft(apiUrlBuilder) { case (builder, segment) =>
     builder.addPathSegment(segment)
   }.build()
+
+  def pathWithQueryParams(queryParams: Seq[(String, String)], segments: String*): HttpUrl = {
+    val builderWithPathSegments = segments.foldLeft(apiUrlBuilder) { case (builder, segment) =>
+      builder.addPathSegment(segment)
+    }
+    queryParams.foldLeft(builderWithPathSegments) { case (builder, (key, value)) =>
+      builder.addQueryParameter(key, value)
+    }.build()
+  }
   
   case class UrlAndParser(url: HttpUrl, parser: Reads[_])
 }
@@ -265,13 +274,16 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
   def followAndEnumerateChunky[C: Reads](url: HttpUrl): ListStream[C] = punk[C, C](url)(Chunk.singleton)
 
   def punk[S: Reads, T](url: HttpUrl)(f: S => Chunk[T]) =
-    unfoldChunkLoopEval(url)(getAndCache[S](_).map(resp => (f(resp.result), resp.responseMeta.nextOpt)))
+    unfoldChunkLoopEval(url)(getAndCache[S](_).map {
+      resp => (f(resp.result), resp.responseMeta.nextOpt)
+    })
 
   /**
    * [[https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-repositories-for-the-authenticated-user]]
    * GET /user/repos
    */
-  def listRepos(sort: String, direction: String): ListStream[Repo] = followAndEnumerate[Repo](path("user", "repos"))
+  def listRepos(queryParams: (String, String)*): ListStream[Repo] =
+    followAndEnumerate[Repo](pathWithQueryParams(queryParams, "user", "repos"))
 
   /**
    * [[https://docs.github.com/en/rest/apps/installations?apiVersion=2022-11-28#list-repositories-accessible-to-the-app-installation]]
@@ -284,8 +296,8 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
    * [[https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-organization-repositories]]
    * GET /orgs/{org}/repos
    */
-  def listOrgRepos(org: String, sort: String, direction: String): ListStream[Repo] =
-    followAndEnumerate[Repo](path("orgs", org, "repos"))
+  def listOrgRepos(org: String, queryParams: (String, String)*): ListStream[Repo] =
+    followAndEnumerate[Repo](pathWithQueryParams(queryParams, "orgs", org, "repos"))
 
   /**
    * https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user

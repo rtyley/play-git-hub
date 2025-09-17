@@ -97,7 +97,6 @@ class GitHubAppAuth(jwts: GitHubAppJWTs) extends Logging {
     installation,
     new AccessToken.Cache(new InstallationAccessTokenProvider(this, installation.id))
   )
-
 }
 
 case class InstallationAccess(
