@@ -1,9 +1,9 @@
 package com.madgag.github.apps
 
 import com.madgag.github.AccessToken
-import com.madgag.okhttpscala._
-import com.madgag.scalagithub.GitHub.{ReqMod, _}
-import com.madgag.scalagithub.GitHubCredentials
+import com.madgag.okhttpscala.*
+import com.madgag.scalagithub.GitHub.{ReqMod, *}
+import com.madgag.scalagithub.{AccountAccess, GitHubCredentials}
 import com.madgag.scalagithub.model.{Account, GitHubApp, Installation}
 import okhttp3.Request.Builder
 import okhttp3.{HttpUrl, OkHttpClient}
@@ -97,7 +97,6 @@ class GitHubAppAuth(jwts: GitHubAppJWTs) extends Logging {
     installation,
     new AccessToken.Cache(new InstallationAccessTokenProvider(this, installation.id))
   )
-
 }
 
 case class InstallationAccess(
@@ -105,6 +104,8 @@ case class InstallationAccess(
   credentials: GitHubCredentials.Provider
 ) {
   val installedOnAccount: Account = installation.account
+  
+  def accountAccess()(using ExecutionContext): AccountAccess = AccountAccess(installation.account, credentials)
 }
 
 case class InstallationTokenResponse(

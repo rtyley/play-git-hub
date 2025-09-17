@@ -16,6 +16,7 @@
 
 package com.madgag.scalagithub
 
+import cats.Endo
 import cats.effect.IO
 import com.gu.etagcaching.FreshnessPolicy.AlwaysWaitForRefreshedValue
 import com.gu.etagcaching.fetching.Fetching
@@ -109,7 +110,7 @@ object GitHub {
     def withCaching: Builder = builder.cacheControl(AlwaysHitNetwork)
   }
 
-  type ReqMod = Builder => Builder
+  type ReqMod = Endo[Builder]
 
   type ListStream[T] = fs2.Stream[IO, T]
 
@@ -118,6 +119,15 @@ object GitHub {
   def path(segments: String*): HttpUrl = segments.foldLeft(apiUrlBuilder) { case (builder, segment) =>
     builder.addPathSegment(segment)
   }.build()
+
+  def pathWithQueryParams(queryParams: Seq[(String, String)], segments: String*): HttpUrl = {
+    val builderWithPathSegments = segments.foldLeft(apiUrlBuilder) { case (builder, segment) =>
+      builder.addPathSegment(segment)
+    }
+    queryParams.foldLeft(builderWithPathSegments) { case (builder, (key, value)) =>
+      builder.addQueryParameter(key, value)
+    }.build()
+  }
   
   case class UrlAndParser(url: HttpUrl, parser: Reads[_])
 }
@@ -129,31 +139,23 @@ object GitHub {
 class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
   import GitHub.*
 
-  val okHttpClient = new OkHttpClient.Builder()
+  private val okHttpClient = new OkHttpClient.Builder()
     .cache(new okhttp3.Cache(Files.createTempDirectory("github-api-cache").toFile, 5 * 1024 * 1024))
     .build()
 
-  def addAuth(builder: Builder): IO[Builder] = {
-    val credsF = ghCredentials()
-    for {
-      creds <- credsF
-    } yield builder.addHeader("Authorization", s"Bearer ${creds.accessToken.value}")
-//      .addHeader("Accept", "application/vnd.github+json")
-//      .addHeader("X-GitHub-Api-Version", "2022-11-28")
+  private val requestHeaders: IO[Map[String, String]] = ghCredentials().map { creds =>
+    Map(
+      "Authorization" -> s"Bearer ${creds.accessToken.value}",
+      "Accept" -> "application/vnd.github+json",
+      "X-GitHub-Api-Version" -> "2022-11-28"
+    )
   }
 
-  def addMoreAuth(builder: HttpRequest.Builder): IO[HttpRequest.Builder] = {
-    val credsF = ghCredentials()
-    for {
-      creds <- credsF
-    } yield builder.header("Authorization", s"Bearer ${creds.accessToken.value}")
-    //      .addHeader("Accept", "application/vnd.github+json")
-    //      .addHeader("X-GitHub-Api-Version", "2022-11-28")
-  }
-
+  private def addAuth[B](builder: B, f: (B, String, String) => B): IO[B] =
+    requestHeaders.map(_.foldLeft(builder) { case (b, (k,v)) => f(b, k, v) })
 
   def executeAndWrap[T](settings: ReqMod)(processor: (Request, Response) => T): FR[T] = for {
-    builderWithAuth <- addAuth(settings(new Builder()))
+    builderWithAuth <- addAuth(settings(new Builder()), _ addHeader(_, _))
     request = builderWithAuth.build()
     response <- IO.fromFuture(IO(okHttpClient.execute(request) {
       resp => GitHubResponse(logAndGetMeta(request, resp), processor(request, resp))
@@ -166,16 +168,13 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
 
   val httpClient: HttpClient = HttpClient.newBuilder().build()
 
-
-
-  val fetching: Fetching[UrlAndParser, GitHubResponse[String]] =
-    new HttpFetching[String](
-      httpClient,
-      BodyHandlers.ofString(),
-      addMoreAuth(_).unsafeToFuture()(cats.effect.unsafe.implicits.global)
-    ).keyOn[UrlAndParser](_.url.uri).mapResponse {
-      httpResp => GitHubResponse(ResponseMeta.from(httpResp), httpResp.body)
-    }
+  val fetching: Fetching[UrlAndParser, GitHubResponse[String]] = new HttpFetching[String](
+    httpClient,
+    BodyHandlers.ofString(),
+    builder => addAuth(builder, _.header(_, _)).unsafeToFuture()(cats.effect.unsafe.implicits.global)
+  ).keyOn[UrlAndParser](_.url.uri).mapResponse {
+    httpResp => GitHubResponse(ResponseMeta.from(httpResp), httpResp.body)
+  }
 
   val etagCache: ETagCache[UrlAndParser, GitHubResponse[_]] = new ETagCache(
     fetching.thenParsingWithKey { (urlAndParser, response) =>
@@ -214,7 +213,7 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
    * ResponseMeta.Quota would be misleading.
    */
   def checkRateLimit(): IO[Option[RateLimit.Status]] = for {
-    builderWithAuth <- addAuth(new Builder().url(path("rate_limit")))
+    builderWithAuth <- addAuth(new Builder().url(path("rate_limit")), _.header(_, _))
     resp <- IO.fromFuture(IO(okHttpClient.execute(builderWithAuth.build())(identity)))
   } yield ResponseMeta.rateLimitStatusFrom(resp.headers.toJdkHeaders)
 
@@ -265,13 +264,16 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
   def followAndEnumerateChunky[C: Reads](url: HttpUrl): ListStream[C] = punk[C, C](url)(Chunk.singleton)
 
   def punk[S: Reads, T](url: HttpUrl)(f: S => Chunk[T]) =
-    unfoldChunkLoopEval(url)(getAndCache[S](_).map(resp => (f(resp.result), resp.responseMeta.nextOpt)))
+    unfoldChunkLoopEval(url)(getAndCache[S](_).map {
+      resp => (f(resp.result), resp.responseMeta.nextOpt)
+    })
 
   /**
    * [[https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-repositories-for-the-authenticated-user]]
    * GET /user/repos
    */
-  def listRepos(sort: String, direction: String): ListStream[Repo] = followAndEnumerate[Repo](path("user", "repos"))
+  def listRepos(queryParams: (String, String)*): ListStream[Repo] =
+    followAndEnumerate[Repo](pathWithQueryParams(queryParams, "user", "repos"))
 
   /**
    * [[https://docs.github.com/en/rest/apps/installations?apiVersion=2022-11-28#list-repositories-accessible-to-the-app-installation]]
@@ -284,8 +286,8 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
    * [[https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-organization-repositories]]
    * GET /orgs/{org}/repos
    */
-  def listOrgRepos(org: String, sort: String, direction: String): ListStream[Repo] =
-    followAndEnumerate[Repo](path("orgs", org, "repos"))
+  def listOrgRepos(org: String, queryParams: (String, String)*): ListStream[Repo] =
+    followAndEnumerate[Repo](pathWithQueryParams(queryParams, "orgs", org, "repos"))
 
   /**
    * https://docs.github.com/en/rest/orgs/members?apiVersion=2022-11-28#check-organization-membership-for-a-user

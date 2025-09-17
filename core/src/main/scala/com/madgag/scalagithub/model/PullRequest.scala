@@ -130,6 +130,7 @@ case class PullRequest(
   title: String,
   body: Option[String],
   created_at: ZonedDateTime,
+  updated_at: ZonedDateTime,
   merged: Option[Boolean], // not present on https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#list-pull-requests
   merged_at: Option[ZonedDateTime],
   merge_commit_sha: Option[ObjectId], // deprecated? https://developer.github.com/v3/pulls/#get-a-single-pull-request

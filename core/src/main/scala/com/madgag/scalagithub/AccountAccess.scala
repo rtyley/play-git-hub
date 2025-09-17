@@ -24,6 +24,6 @@ import scala.concurrent.ExecutionContext
 class AccountAccess(
   val account: Account,
   val credentials: Provider
-)(implicit ec: ExecutionContext) {
+)(using ExecutionContext) {
   val gitHub = new GitHub(credentials)
 }

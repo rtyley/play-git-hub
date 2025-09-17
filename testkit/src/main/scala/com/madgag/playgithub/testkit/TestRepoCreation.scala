@@ -17,12 +17,12 @@
 package com.madgag.playgithub.testkit
 
 import cats.*
-import cats.data.*
-import cats.effect.{IO, Temporal}
+import cats.effect.std.Random
+import cats.effect.{Clock, IO, Temporal}
 import cats.implicits.*
-import cats.syntax.all.*
 import com.madgag.git.*
-import com.madgag.github.Implicits.*
+import com.madgag.git.test.unpackRepo
+import com.madgag.scalagithub
 import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.commands.CreateRepo
 import com.madgag.scalagithub.model.Repo
@@ -34,55 +34,58 @@ import org.eclipse.jgit.lib.*
 import org.eclipse.jgit.lib.Constants.HEAD
 import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.scalatest.matchers.should.Matchers.all
-import retry.ResultHandler.retryOnAllErrors
-import retry.RetryPolicies.{fullJitter, limitRetries, limitRetriesByCumulativeDelay}
-import retry.syntax.*
 import retry.*
+import retry.ResultHandler.retryOnAllErrors
+import retry.RetryPolicies.{fullJitter, limitRetriesByCumulativeDelay}
+import retry.syntax.*
 
 import java.nio.file.Files.createTempDirectory
+import java.nio.file.Path
+import java.time.Duration
 import java.time.Duration.ofMinutes
+import scala.concurrent.ExecutionContext
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.DurationInt
-import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
-import cats.syntax.all.*
-import cats.data.*
-import cats.effect.{IO, IOApp}
-import cats.syntax.all.*
-import com.madgag.scalagithub
 
-
-class ToastRepoCreation(
+class TestRepoCreation(
   testFixtureAccountAccess: AccountAccess,
   testRepoNamePrefix: String
 ) {
   given credsProvider: GitHubCredentials.Provider = testFixtureAccountAccess.credentials
   given gitHub: GitHub = testFixtureAccountAccess.gitHub
 
-  val retryPolicy: RetryPolicy[IO, Throwable] = limitRetriesByCumulativeDelay(70.seconds, fullJitter(1.seconds))
+  val retryPolicy: RetryPolicy[IO, Throwable] = limitRetriesByCumulativeDelay(30.seconds, fullJitter(1.seconds))
 
-  def createTestRepo(localGitRepo: FileRepository)(implicit ec: ExecutionContext): IO[Repo] = {
-    for {
-      testGithubRepo <- createBlankGitHubRepo()
-      _ <- pushLocalRepoToGitHub(localGitRepo, testGithubRepo) >>
-        Temporal[IO].sleep(1500.milli) >> // pause to allow the GitHub API to catch up - reduces retries
-        validateGitHubAPISuccessfullyRepresentsLocalRepo(testGithubRepo, localGitRepo.getRefDatabase)
-    } yield testGithubRepo
-  }
+  def createTestRepo(path: Path): IO[Repo] = for {
+    localGitRepo <- IO.blocking(unpackRepo(path))
+    testGithubRepo <- createBlankGitHubRepo()
+    _ <- pushLocalRepoToGitHub(localGitRepo, testGithubRepo) >>
+      Temporal[IO].sleep(1500.milli) >> // pause to allow the GitHub API to catch up - reduces retries
+      validateGitHubAPISuccessfullyRepresentsLocalRepo(testGithubRepo, localGitRepo.getRefDatabase)
+  } yield testGithubRepo
 
   def isOldTestRepo(repo: Repo): Boolean =
     repo.name.startsWith(testRepoNamePrefix) && repo.created_at.toInstant.age() > ofMinutes(30)
 
-  def deleteTestRepos()(implicit ec: ExecutionContext): IO[Unit] = gitHub
-    .listRepos(sort = "created", direction = "asc").filter(isOldTestRepo)
-    .parEvalMapUnordered(4)(_.delete(): IO[_]).compile.drain
+  def deleteTestRepos(): IO[Map[Boolean, Set[Repo]]] = testFixtureAccountAccess.account
+    .listRepos("sort" -> "created", "direction" -> "asc").filter(isOldTestRepo)
+    .parEvalMapUnordered(4)(repo => repo.delete().map(res => Map(res.result -> Set(repo)))).compile.foldMonoid
 
-  private def createBlankGitHubRepo()(implicit ec: ExecutionContext): IO[Repo] = for {
+  private def createBlankGitHubRepo(): IO[Repo] = for {
+    now <- Clock[IO].realTimeInstant
+    randInt <- Random[IO].nextIntBounded(1000000)
     testRepoId <- testFixtureAccountAccess.account.createRepo(CreateRepo(
-      name = testRepoNamePrefix + System.currentTimeMillis().toString,
+      name = s"$testRepoNamePrefix-${now.getEpochSecond}-$randInt",
       `private` = false
     )).map(_.result.repoId)
     testGithubRepo <- gitHub.getRepo(testRepoId)
-  } yield testGithubRepo.result
+  } yield {
+
+    val repo = testGithubRepo.result
+    println(s"Created repo: ${repo.url}")
+    repo
+  }
 
   private def pushLocalRepoToGitHub(
     localGitRepo: FileRepository, testGithubRepo: Repo
@@ -104,19 +107,19 @@ class ToastRepoCreation(
 
     val defaultBranchName = testGithubRepo.default_branch
     if (Option(localGitRepo.findRef(defaultBranchName)).isEmpty) {
-      println(s"Going to create a '$defaultBranchName' branch")
+      println(s"Creating a '$defaultBranchName' branch to correspond to the one in ${testGithubRepo.url}")
       localGitRepo.git.branchCreate().setName(defaultBranchName).setStartPoint("HEAD").call()
     }
   }
 
   private def validateGitHubAPISuccessfullyRepresentsLocalRepo(
     testGithubRepo: Repo, expectedRefs: RefDatabase
-  )(using ExecutionContext): IO[Unit] = for {
+  ): IO[Unit] = for {
     _ <- validateGitHubAPIGives(expectedRefs, testGithubRepo)
     _ <- validateGitHubRepoCanBeSuccessfullyLocallyCloned(expectedRefs, testGithubRepo)
   } yield ()
 
-  private def validateGitHubAPIGives(expectedRefs: RefDatabase, testGitHubRepo: Repo)(using ExecutionContext) = {
+  private def validateGitHubAPIGives(expectedRefs: RefDatabase, testGitHubRepo: Repo) = {
     IO.traverse(expectedRefs.branchRefs) { branchRef =>
       getRefDataFromGitHubApi(testGitHubRepo, branchRef).map(_.result.objectId).map { a =>
           require(a.toObjectId == branchRef.getObjectId, s"${a.toObjectId} IS NOT ${branchRef.getObjectId}")
@@ -132,10 +135,8 @@ class ToastRepoCreation(
     require(actualId == expectedId, s"actualId=$actualId expectedId=$expectedId")
   }
 
-  private def getRefDataFromGitHubApi(testGithubRepo: Repo, branchRef: Ref)(using ExecutionContext, GitHub): FR[model.Ref] = {
+  private def getRefDataFromGitHubApi(testGithubRepo: Repo, branchRef: Ref)(using GitHub): FR[model.Ref] = {
     val foo: FR[model.Ref] = testGithubRepo.refs.get(branchRef)
-
-    type G = GitHubResponse[model.Ref]
 
     (foo: IO[GitHubResponse[model.Ref]]).retryingOnErrors(retryPolicy, retryOnAllErrors(logRetry(s"get ${branchRef.getName}")))
   }

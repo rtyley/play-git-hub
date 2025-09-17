@@ -45,7 +45,7 @@ trait Account {
 
   def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: EC): FR[Repo]
 
-  def listRepos()(implicit github: GitHub, ec: EC): ListStream[Repo]
+  def listRepos(queryParams: (String, String)*)(using github: GitHub): ListStream[Repo]
 }
 
 object Account {
