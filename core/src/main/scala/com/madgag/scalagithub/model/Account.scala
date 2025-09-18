@@ -19,10 +19,11 @@ package com.madgag.scalagithub.model
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.{FR, ListStream}
 import com.madgag.scalagithub.commands.CreateRepo
-import okhttp3.HttpUrl
 import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.scaladsl.Source
 import play.api.libs.json.Reads
+import sttp.model.*
+import sttp.model.Uri.*
 
 import java.time.ZonedDateTime
 import scala.concurrent.ExecutionContext as EC
@@ -41,9 +42,9 @@ trait Account {
 
   lazy val displayName: String = name.filter(_.nonEmpty).getOrElse(atLogin)
 
-  def reFetch()(implicit g: GitHub, ec: EC, ev: Reads[Self]): FR[Self]  = g.getAndCache[Self](HttpUrl.get(url))
+  def reFetch()(using g: GitHub, ec: EC, ev: Reads[Self]): FR[Self]  = g.getAndCache[Self](Uri(url))
 
-  def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: EC): FR[Repo]
+  def createRepo(cr: CreateRepo)(using github: GitHub): FR[Repo]
 
   def listRepos(queryParams: (String, String)*)(using github: GitHub): ListStream[Repo]
 }

@@ -18,12 +18,13 @@ package com.madgag.scalagithub.model
 
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.FR
-import okhttp3.Request.Builder
+import sttp.client4.*
+import sttp.model.Uri
 
 import scala.concurrent.{ExecutionContext => EC, Future}
 
 trait Deletable {
   val url: String
 
-  def delete()(implicit g: GitHub, ec: EC): FR[Boolean] = g.executeAndCheck(_.url(url).delete())
+  def delete()(implicit g: GitHub, ec: EC): FR[Boolean] = g.executeAndCheck(basicRequest.delete(Uri(url)))
 }

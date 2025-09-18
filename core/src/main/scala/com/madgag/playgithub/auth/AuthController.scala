@@ -16,40 +16,41 @@
 
 package com.madgag.playgithub.auth
 
-import cats.effect.IO
+import cats.effect.*
 import com.madgag.github.GitHubAuthResponse
-import com.madgag.okhttpscala.*
 import com.madgag.playgithub.auth.AuthenticatedSessions.AccessToken
 import com.madgag.scalagithub.{GitHub, GitHubCredentials}
-import okhttp3.OkHttpClient
 import play.api.libs.json.Json
 import play.api.mvc.*
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
-import cats.effect.implicits._
+import cats.effect.implicits.*
+import sttp.model.Uri.*
+import sttp.client4.{WebSocketBackend, quickRequest}
+import sttp.client4.httpclient.cats.HttpClientCatsBackend
+import sttp.client4.{UriContext, *}
+import sttp.model.Uri.*
 
 trait AuthController extends BaseController {
+
+  val httpClient: Resource[IO, WebSocketBackend[IO]] = HttpClientCatsBackend.resource[IO]()
 
   val authClient: Client
 
   val defaultPage = "/"
 
-  val client = new okhttp3.OkHttpClient()
-
-  val AccessTokenUrl = "https://github.com/login/oauth/access_token"
+  val AccessTokenUrl = uri"https://github.com/login/oauth/access_token"
 
   def oauthCallback(code: String): Action[AnyContent] = Action.async { req =>
-    val accessTokenRequest = new okhttp3.Request.Builder()
-      .url(s"$AccessTokenUrl?client_id=${authClient.id}&client_secret=${authClient.secret}&code=$code")
-      .addHeader(ACCEPT, "application/json")
-      .post(EmptyRequestBody)
-      .build()
+    val accessTokenRequest = quickRequest
+      .post(AccessTokenUrl.withParams("client_id" -> authClient.id, "client_secret" -> authClient.secret, "code" -> code))
+      .header(ACCEPT, "application/json")
 
     (for {
-      accessToken <- IO.fromFuture(IO(client.execute(accessTokenRequest) { response =>
-        Json.parse(response.body.byteStream()).validate[GitHubAuthResponse].get.access_token
-      }))
+      accessToken <- httpClient.use(accessTokenRequest.send).map {
+        resp => Json.parse(resp.body).validate[GitHubAuthResponse].get.access_token
+      }
       userResponse <- new GitHub(() => IO.pure(GitHubCredentials(com.madgag.github.AccessToken(accessToken)))).getUser()
     } yield {
       val user = userResponse.result

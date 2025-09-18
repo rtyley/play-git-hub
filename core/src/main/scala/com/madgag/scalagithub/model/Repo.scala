@@ -16,6 +16,8 @@
 
 package com.madgag.scalagithub.model
 
+import sttp.client4.*
+import sttp.model.Uri
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.{FR, ListStream}
 import com.madgag.scalagithub.commands.*
@@ -197,16 +199,16 @@ trait CanCheck[ID] {
 
   val link: Link[ID]
 
-  def check(id: ID)(implicit g: GitHub, ec: EC): FR[Boolean] =
-    g.executeAndCheck(_.url(link.urlFor(id)))
+  def check(id: ID)(using g: GitHub): FR[Boolean] =
+    g.executeAndCheck(basicRequest.get(link.urlFor(id)))
 }
 
 trait CanDelete[ID] {
 
   val link: Link[ID]
 
-  def delete(id: ID)(implicit g: GitHub, ec: EC): FR[Boolean] =
-    g.executeAndCheck(_.url(link.urlFor(id)).delete())
+  def delete(id: ID)(using g: GitHub): FR[Boolean] =
+    g.executeAndCheck(basicRequest.delete(link.urlFor(id))
 }
 
 trait CanReplace[T, ID] extends Reader[T] {
@@ -222,7 +224,7 @@ trait CanReplace[T, ID] extends Reader[T] {
 }
 
 trait Link[P] {
-  def urlFor(p: P): String
+  def urlFor(p: P): Uri
   val listUrl: String
 }
 
@@ -234,14 +236,14 @@ object Link {
 
     override def urlFor(p: P) = {
       val replacement = if (suffix.startsWith("/")) s"/$p" else p.toString
-      suffixedUrl.replace(encasedSuffix, replacement)
+      Uri(suffixedUrl.replace(encasedSuffix, replacement))
     }
 
     override val listUrl = suffixedUrl.stripSuffix(encasedSuffix)
   }
 
   def fromListUrl[P](suppliedListUrl: String) = new Link[P] {
-    override def urlFor(p: P) = s"$listUrl/$p"
+    override def urlFor(p: P) = Uri(s"$listUrl/$p")
 
     override val listUrl = suppliedListUrl
   }
@@ -250,7 +252,7 @@ object Link {
 case class SuffixedEndpointHandler[P](suffixedUrl: String, suffix: String) extends Link[P] {
   val encasedSuffix = s"{$suffix}"
 
-  def urlFor(p: P): String = suffixedUrl.replace(encasedSuffix, s"/$p")
+  def urlFor(p: P): Uri = Uri(suffixedUrl.replace(encasedSuffix, s"/$p"))
 
   val listUrl = suffixedUrl.stripSuffix(encasedSuffix)
 }

@@ -1,14 +1,15 @@
 package com.madgag.github.apps
 
+import cats.effect.IO
 import com.madgag.github.AccessToken
-import com.madgag.okhttpscala.*
 import com.madgag.scalagithub.GitHub.{ReqMod, *}
-import com.madgag.scalagithub.{AccountAccess, GitHubCredentials}
 import com.madgag.scalagithub.model.{Account, GitHubApp, Installation}
-import okhttp3.Request.Builder
-import okhttp3.{HttpUrl, OkHttpClient}
+import com.madgag.scalagithub.{AccountAccess, GitHubCredentials}
 import play.api.Logging
 import play.api.libs.json.{Json, Reads}
+import sttp.client4.*
+import sttp.model.*
+import sttp.client4.quickRequest
 
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
@@ -38,14 +39,18 @@ object GitHubAppAuth {
  */
 class GitHubAppAuth(jwts: GitHubAppJWTs) extends Logging {
 
-  val okHttpClient = new OkHttpClient.Builder().build()
-
-  private val addHeaders: ReqMod =
+  val httpClient: Resource[IO, WebSocketBackend[IO]] = HttpClientCatsBackend.resource[IO]()
+  
+  private def headers(): Seq[Header] =
     _.addHeader("Accept", "application/vnd.github+json")
       .addHeader("Authorization", s"Bearer ${jwts.currentJWT()}")
       .addHeader("X-GitHub-Api-Version", "2022-11-28")
 
-  def request[T: Reads](reqMod: ReqMod, successStatusCode: Int)(implicit ec: ExecutionContext): Future[T] = {
+  private def request[T: Reads](req: sttp.client4.PartialRequest[String], successStatusCode: Int): IO[T] = {
+    httpClient.use { backend =>
+      req.withHeaders(headers()).send(backend)
+    }
+    req.withHeaders(headers())
     val req = addHeaders(reqMod(new Builder())).build()
     okHttpClient.execute(req) { response =>
       if (response.code == successStatusCode) readAndResolve(req, response) else {
@@ -55,35 +60,35 @@ class GitHubAppAuth(jwts: GitHubAppJWTs) extends Logging {
     }
   }
 
-  def executeGet[T: Reads](url: HttpUrl)(implicit ec: ExecutionContext): Future[T] = request(_.url(url).get(), 200)
+  def executeGet[T: Reads](uri: Uri): IO[T] = request(_.url(url).get(), 200)
 
   /**
    * https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation#generating-an-installation-access-token
    * https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#create-an-installation-access-token-for-an-app
    */
-  def getInstallationAccessToken(installationId: Long)(implicit ec: ExecutionContext): Future[InstallationTokenResponse] =
+  def getInstallationAccessToken(installationId: Long): IO[InstallationTokenResponse] =
     request[InstallationTokenResponse](_.url(path("app", "installations", installationId.toString, "access_tokens")).post(EmptyRequestBody), 201)
 
   /**
    * [[https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#get-the-authenticated-app]]
    */
-  def getAuthenticatedApp()(implicit ec: ExecutionContext): Future[GitHubApp] = executeGet[GitHubApp](path("app"))
+  def getAuthenticatedApp(): IO[GitHubApp] = executeGet[GitHubApp](path("app"))
 
   /**
    * [[https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#get-an-installation-for-the-authenticated-app]]
    *
    * GET /app/installations/{installation_id}
    */
-  def getInstallation(installationId: Long)(implicit ec: ExecutionContext): Future[Installation] =
+  def getInstallation(installationId: Long): IO[Installation] =
     executeGet[Installation](path("app", "installations", installationId.toString))
 
   /**
    * [[https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#list-installations-for-the-authenticated-app]]
    */
-  def getInstallations()(implicit ec: ExecutionContext): Future[Seq[Installation]] =
+  def getInstallations(): IO[Seq[Installation]] =
     executeGet[Seq[Installation]](path("app", "installations"))
 
-  def getSoleInstallation(installationId: Option[Long] = None)(implicit ec: ExecutionContext): Future[Installation] =
+  def getSoleInstallation(installationId: Option[Long] = None): IO[Installation] =
     installationId.fold(for {
       installations <- getInstallations()
     } yield {
@@ -91,7 +96,7 @@ class GitHubAppAuth(jwts: GitHubAppJWTs) extends Logging {
       installations.head
     })(getInstallation)
 
-  def accessSoleInstallation(installationId: Option[Long] = None)(implicit ec: ExecutionContext): Future[InstallationAccess] = for {
+  def accessSoleInstallation(installationId: Option[Long] = None): IO[InstallationAccess] = for {
     installation <- getSoleInstallation(installationId)
   } yield InstallationAccess(
     installation,

@@ -17,16 +17,15 @@
 package com.madgag.github.apps
 
 import com.madgag.github.{AccessToken, Expirable}
-
+import cats.effect.IO
 import scala.concurrent.{ExecutionContext, Future}
 
 class InstallationAccessTokenProvider(
   githubAppAuth: GitHubAppAuth,
   installationId: Long
-)(implicit ec: ExecutionContext)
-  extends (() => Future[Expirable[AccessToken]]) {
+) extends (() => IO[Expirable[AccessToken]]) {
 
-  override def apply(): Future[Expirable[AccessToken]] =
+  override def apply(): IO[Expirable[AccessToken]] =
     githubAppAuth.getInstallationAccessToken(installationId).map(resp => Expirable(resp.token, resp.expires_at))
 
 }

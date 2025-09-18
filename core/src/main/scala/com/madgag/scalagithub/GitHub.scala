@@ -16,32 +16,49 @@
 
 package com.madgag.scalagithub
 
+import play.api.libs.json.{Json, Reads}
 import cats.Endo
 import cats.effect.IO
+import cats.effect.kernel.Resource
 import com.gu.etagcaching.FreshnessPolicy.AlwaysWaitForRefreshedValue
 import com.gu.etagcaching.fetching.Fetching
 import com.gu.etagcaching.{ETagCache, FreshnessPolicy}
-import com.madgag.okhttpscala.*
 import com.madgag.ratelimitstatus.RateLimit
 import com.madgag.scalagithub.ResponseMeta.RichHeaders
 import com.madgag.scalagithub.commands.*
 import com.madgag.scalagithub.model.*
 import fs2.Chunk
 import fs2.Stream.unfoldChunkLoopEval
-import okhttp3.*
-import okhttp3.Request.Builder
 import play.api.Logger
 import play.api.http.Status
-import play.api.libs.json.*
 import play.api.libs.json.Json.toJson
+import sttp.client4.httpclient.cats.HttpClientCatsBackend
+import sttp.client4.{UriContext, *}
+import sttp.model.Uri.*
+import sttp.model.*
 
+import java.net.http.HttpClient
 import java.net.http.HttpResponse.BodyHandlers
-import java.net.http.{HttpClient, HttpRequest}
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit.SECONDS
 import scala.concurrent.ExecutionContext as EC
 import scala.concurrent.duration.*
 import scala.language.implicitConversions
+
+object Foo {
+
+  HttpClientCatsBackend.resource[IO]().use { backend =>
+    // 2. Make a request using the backend
+    val request = basicRequest.get(uri"https://httpbin.org/get")
+
+    // 3. Send the request and get the response body
+    for {
+      response <- request.send(backend)
+      _ <- IO(println(s"Response body: ${response.body}"))
+    } yield response.body
+  }
+}
+
 
 case class Quota(
   consumed: Int,
@@ -72,8 +89,8 @@ object GitHub {
 
   type FR[A] = IO[GitHubResponse[A]]
 
-  implicit def jsonToRequestBody(json: JsValue): RequestBody =
-    RequestBody.create(json.toString, JsonMediaType)
+//  implicit def jsonToRequestBody(json: JsValue): RequestBody =
+//    RequestBody.create(json.toString, JsonMediaType)
 
   val JsonMediaType = MediaType.parse("application/json; charset=utf-8")
 
@@ -106,17 +123,13 @@ object GitHub {
     }
   }
 
-  implicit class RichOkHttpBuilder(builder: Builder) {
-    def withCaching: Builder = builder.cacheControl(AlwaysHitNetwork)
-  }
-
   type ReqMod = Endo[Builder]
 
   type ListStream[T] = fs2.Stream[IO, T]
 
-  def apiUrlBuilder: HttpUrl.Builder = new HttpUrl.Builder().scheme("https").host("api.github.com")
+  val apiUri: Uri = uri"https://api.github.com"
 
-  def path(segments: String*): HttpUrl = segments.foldLeft(apiUrlBuilder) { case (builder, segment) =>
+  def path(segments: String*): Uri = segments.foldLeft(apiUrlBuilder) { case (builder, segment) =>
     builder.addPathSegment(segment)
   }.build()
 
@@ -129,7 +142,7 @@ object GitHub {
     }.build()
   }
   
-  case class UrlAndParser(url: HttpUrl, parser: Reads[_])
+  case class UrlAndParser(uri: Uri, parser: Reads[_])
 }
 
 /**
@@ -139,9 +152,7 @@ object GitHub {
 class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
   import GitHub.*
 
-  private val okHttpClient = new OkHttpClient.Builder()
-    .cache(new okhttp3.Cache(Files.createTempDirectory("github-api-cache").toFile, 5 * 1024 * 1024))
-    .build()
+  val httpClient: Resource[IO, WebSocketBackend[IO]] = HttpClientCatsBackend.resource[IO]()
 
   private val requestHeaders: IO[Map[String, String]] = ghCredentials().map { creds =>
     Map(
@@ -166,10 +177,8 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
     case (req, response) => readAndResolve[T](req, response)
   }
 
-  val httpClient: HttpClient = HttpClient.newBuilder().build()
-
   val fetching: Fetching[UrlAndParser, GitHubResponse[String]] = new HttpFetching[String](
-    httpClient,
+    HttpClient.newBuilder().build(),
     BodyHandlers.ofString(),
     builder => addAuth(builder, _.header(_, _)).unsafeToFuture()(cats.effect.unsafe.implicits.global)
   ).keyOn[UrlAndParser](_.url.uri).mapResponse {
@@ -184,21 +193,20 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
     _.expireAfterWrite(1.minutes)
   )
 
-  def getAndCache[T: Reads](url: HttpUrl): FR[T] = 
+  def getAndCache[T: Reads](uri: Uri): FR[T] =
     IO.fromFuture(IO(etagCache.get(UrlAndParser(url, implicitly[Reads[T]])).map(_.get.asInstanceOf[GitHubResponse[T]])))
-    // executeAndReadJson[T](_.url(url).withCaching)
 
-  def create[CC : Writes, Res: Reads](url: HttpUrl, cc: CC)(implicit ec: EC) : FR[Res] =
+  def create[CC : Writes, Res: Reads](uri: Uri, cc: CC)(implicit ec: EC) : FR[Res] =
     executeAndReadJson[Res](_.url(url).post(toJson(cc)))
 
-  def put[CC : Writes, Res: Reads](url: HttpUrl, cc: CC)(implicit ec: EC) : FR[Res] =
+  def put[CC : Writes, Res: Reads](uri: Uri, cc: CC)(implicit ec: EC) : FR[Res] =
     executeAndReadJson[Res](_.url(url).put(toJson(cc)))
 
   def executeAndReadOptionalJson[T : Reads](settings: ReqMod): FR[Option[T]] = executeAndWrap(settings) {
     case (req, response) => Option.when(response.code() != 404)(readAndResolve[T](req, response))
   }
 
-  def executeAndCheck(settings: ReqMod): FR[Boolean] = executeAndWrap(settings) { case (req, resp) =>
+  def executeAndCheck(settings: Request[_]): FR[Boolean] = executeAndWrap(settings) { case (req, resp) =>
     val allGood = resp.code() == Status.NO_CONTENT
     if (!allGood) {
       logger.warn(s"Non-OK response code to ${req.method} ${req.url} : ${resp.code()}\n\n${resp.body()}\n\n" )
@@ -213,7 +221,7 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
    * ResponseMeta.Quota would be misleading.
    */
   def checkRateLimit(): IO[Option[RateLimit.Status]] = for {
-    builderWithAuth <- addAuth(new Builder().url(path("rate_limit")), _.header(_, _))
+    builderWithAuth <- addAuth(apiUri.withPath("rate_limit"), _.header(_, _))
     resp <- IO.fromFuture(IO(okHttpClient.execute(builderWithAuth.build())(identity)))
   } yield ResponseMeta.rateLimitStatusFrom(resp.headers.toJdkHeaders)
 
@@ -250,23 +258,22 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
     * PUT /repos/{owner}/{repo}/contents/{path}
     */
   def createFile(repo: Repo, path: String, createFile: CreateFile): FR[ContentCommit] =
-    create(HttpUrl.get(repo.contents.urlFor(path)), createFile)
+    create(Uri(repo.contents.urlFor(path)), createFile)
 
   /**
     * https://docs.github.com/en/rest/git/trees?apiVersion=2022-11-28#get-a-tree
     * GET /repos/{owner}/{repo}/git/trees/{tree_sha}
     */
   def getTreeRecursively(repo: Repo, sha: String): FR[Tree] =
-    getAndCache(HttpUrl.get(repo.trees.urlFor(sha)+"?recursive=1"))
+    getAndCache(Uri(repo.trees.urlFor(sha)+"?recursive=1"))
 
-  def followAndEnumerate[T: Reads](url: HttpUrl): ListStream[T] = punk[Seq[T], T](url)(Chunk.from)
+  def followAndEnumerate[T: Reads](uri: Uri): ListStream[T] = follow[Seq[T], T](uri)(Chunk.from)
 
-  def followAndEnumerateChunky[C: Reads](url: HttpUrl): ListStream[C] = punk[C, C](url)(Chunk.singleton)
+  def followAndEnumerateChunky[C: Reads](uri: Uri): ListStream[C] = follow[C, C](uri)(Chunk.singleton)
 
-  def punk[S: Reads, T](url: HttpUrl)(f: S => Chunk[T]) =
-    unfoldChunkLoopEval(url)(getAndCache[S](_).map {
-      resp => (f(resp.result), resp.responseMeta.nextOpt)
-    })
+  private def follow[S: Reads, T](uri: Uri)(f: S => Chunk[T]) = unfoldChunkLoopEval(uri)(getAndCache[S](_).map {
+    resp => (f(resp.result), resp.responseMeta.nextOpt)
+  })
 
   /**
    * [[https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-repositories-for-the-authenticated-user]]
@@ -318,7 +325,7 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
    * https://docs.github.com/en/rest/repos/webhooks?apiVersion=2022-11-28#list-repository-webhooks
    * GET /repos/{owner}/{repo}/hooks
    */
-  def listHooks(repo: Repo): ListStream[Hook] = followAndEnumerate(HttpUrl.get(repo.hooks_url))
+  def listHooks(repo: Repo): ListStream[Hook] = followAndEnumerate(Uri(repo.hooks_url))
 
   /**
     * https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28#get-a-team-legacy
@@ -391,15 +398,14 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(implicit ec: EC) {
    * POST /repos/{owner}/{repo}/issues/{issue_number}/comments
    */
   def createComment(commentable: Commentable, comment: String): FR[Comment] =
-    create(HttpUrl.get(commentable.comments_url), CreateComment(comment))
+    create(Uri(commentable.comments_url), CreateComment(comment))
 
   /**
     * https://docs.github.com/en/rest/issues/comments?apiVersion=2022-11-28#list-issue-comments
     * GET /repos/:owner/:repo/issues/:number/comments
     * TODO Pagination
     */
-  def listComments(commentable: Commentable): FR[Seq[Comment]] =
-    getAndCache(HttpUrl.get(commentable.comments_url))
+  def listComments(commentable: Commentable): FR[Seq[Comment]] = getAndCache(Uri(commentable.comments_url))
 
 }
 

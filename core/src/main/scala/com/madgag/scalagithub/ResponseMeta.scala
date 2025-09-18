@@ -19,29 +19,19 @@ package com.madgag.scalagithub
 import com.madgag.ratelimitstatus.{QuotaUpdate, RateLimit}
 import com.madgag.rfc5988link.{LinkParser, LinkTarget}
 import fastparse.parse
-import okhttp3.*
 import play.api.http.Status.NOT_MODIFIED
-import sourcecode.Text.generate
+import sttp.model.Uri
 
 import java.time.Duration.ofHours
 import java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME
 import java.time.{Instant, ZonedDateTime}
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 import scala.language.implicitConversions
-import scala.jdk.OptionConverters._
 
 object ResponseMeta {
   
-  trait Transformations[T] {
-    
-  }
-  
   val GitHubRateLimit: RateLimit = RateLimit(ofHours(1))
-
-  implicit class RichHeaders(headers: Headers) {
-    def toJdkHeaders: java.net.http.HttpHeaders =
-      java.net.http.HttpHeaders.of(headers.toMultimap, (_,_) => true )
-  }
 
   def rateLimitStatusFrom(headers: java.net.http.HttpHeaders): Option[RateLimit.Status] = for {
     remaining <- headers.firstValue("X-RateLimit-Remaining").toScala
@@ -73,16 +63,7 @@ object ResponseMeta {
     linkHeader <- headers.allValues("Link").asScala.toSeq
     linkTargets <- parse(linkHeader, LinkParser.linkValues(_)).get.value
   } yield linkTargets
-
-  def from(resp: Response): ResponseMeta = {
-    val headers = resp.headers.toJdkHeaders
-    ResponseMeta(
-      rateLimitFrom(resp.code == NOT_MODIFIED, Option(resp.networkResponse).map(_.headers.toJdkHeaders)),
-      requestScopesFrom(headers),
-      linksFrom(headers)
-    )
-  }
-
+  
   def from(resp: java.net.http.HttpResponse[_]) = ResponseMeta(
     rateLimitFrom(resp.statusCode == NOT_MODIFIED, Some(resp.headers)),
     requestScopesFrom(resp.headers),
@@ -91,7 +72,7 @@ object ResponseMeta {
 }
 
 case class ResponseMeta(quota: Quota, requestScopes: Option[RequestScopes], links: Seq[LinkTarget]) {
-  val nextOpt: Option[HttpUrl] = links.find(_.relOpt.contains("next")).map(_.url)
+  val nextOpt: Option[Uri] = links.find(_.relOpt.contains("next")).map(_.uri)
 }
 
-case class StoredMeta(nextOpt: Option[HttpUrl])
+case class StoredMeta(nextOpt: Option[Uri])

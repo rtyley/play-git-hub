@@ -17,6 +17,7 @@
 package com.madgag.github
 
 import cats.effect.IO
+import cats.effect.unsafe.IORuntime
 import com.github.blemale.scaffeine.{AsyncLoadingCache, Scaffeine}
 import com.madgag.github.AccessToken.Cache.timeUntilNearExpirationOf
 import com.madgag.scalagithub.GitHubCredentials
@@ -33,7 +34,7 @@ case class AccessToken(value: String) extends AnyVal
 object AccessToken {
   implicit val reads: Reads[AccessToken] = JsPath.read[String].map(AccessToken(_))
 
-  class Cache(provider: () => Future[Expirable[AccessToken]])(implicit ec: ExecutionContext)
+  class Cache(provider: IO[Expirable[AccessToken]])(using IORuntime)
     extends GitHubCredentials.Provider {
 
     private val cache: AsyncLoadingCache[Unit, Expirable[GitHubCredentials]] = Scaffeine()
@@ -43,7 +44,7 @@ object AccessToken {
         update = (_, token, _) => timeUntilNearExpirationOf(token),
         read = (_, _, currentDuration) => currentDuration
       )
-      .buildAsyncFuture(_ => provider().map(_.map(GitHubCredentials(_))))
+      .buildAsyncFuture(_ => provider.map(_.map(GitHubCredentials(_))).unsafeToFuture()
 
     override def apply(): IO[GitHubCredentials] = IO.fromFuture(IO(cache.get(()).map(_.value)))
   }
