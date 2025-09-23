@@ -17,16 +17,16 @@
 package com.madgag.playgithub.auth
 
 import cats.effect.IO
+import cats.effect.unsafe.IORuntime
 import com.madgag.scalagithub.GitHub.ListStream
 import com.madgag.scalagithub.model.Email
 import com.madgag.scalagithub.{GitHub, GitHubCredentials}
 import play.api.mvc.*
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
-class GHRequest[A](val gitHubCredentials: GitHubCredentials, request: Request[A]) extends WrappedRequest[A](request) {
-  val gitHub = new GitHub(() => IO.pure(gitHubCredentials))
+class GHRequest[A](val gitHubCredentials: GitHubCredentials, request: Request[A])(using ExecutionContext, IORuntime) extends WrappedRequest[A](request) {
+  val gitHub = new GitHub(IO.pure(gitHubCredentials))
 
   lazy val userF = gitHub.getUser().map(_.result)
 

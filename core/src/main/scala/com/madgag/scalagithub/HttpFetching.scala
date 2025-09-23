@@ -17,50 +17,46 @@
 package com.madgag.scalagithub
 
 import cats.Endo
+import cats.effect.unsafe.IORuntime
+import cats.effect.{IO, Resource}
 import com.gu.etagcaching.fetching.{ETaggedData, Fetching, Missing, MissingOrETagged}
+import sttp.client4.{PartialRequest, Request, Response, WebSocketBackend}
+import sttp.model.StatusCode.{NotFound, NotModified}
+import sttp.model.{HasHeaders, Header, StatusCode, Uri}
 
-import java.net.HttpURLConnection.{HTTP_NOT_FOUND, HTTP_NOT_MODIFIED}
 import java.net.URI
-import java.net.http.HttpResponse.BodyHandler
-import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import scala.concurrent.{Future, ExecutionContext as EC}
 import scala.jdk.FutureConverters.*
 import scala.jdk.OptionConverters.*
 
 class HttpFetching[T](
-  httpClient: HttpClient,
-  bodyHandler: BodyHandler[T],
-  generalRequestModifier: HttpRequest.Builder => Future[HttpRequest.Builder]
-)(implicit ec: EC) extends Fetching[URI, HttpResponse[T]] {
-
-  httpClient.authenticator()
-
-  private def wrapWithETag(resp: HttpResponse[T]): ETaggedData[HttpResponse[T]] = {
-    val optETag = resp.headers().firstValue("ETag").toScala
+  httpClientResource: Resource[IO, WebSocketBackend[IO]],
+  baseRequest: PartialRequest[T],
+  nonConstantHeaders: IO[Seq[Header]]
+)(using IORuntime) extends Fetching[Uri, Response[T]] {
+  
+  private def wrapWithETag(resp: Response[T]): ETaggedData[Response[T]] = {
+    val optETag = resp.header("ETag")
     if (optETag.isEmpty) {
-      println(resp.statusCode())
-      println(s"${resp.request().uri()} ${resp.body()}")
+      println(resp.code)
+      println(s"${resp.request.uri} ${resp.body}")
     }
     val eTag = optETag.get // ? we're assuming that all responses will have an ETag...
     ETaggedData(eTag, resp)
   }
 
-  private def performFetch(
-    resourceId: URI,
-    reqModifier: Endo[HttpRequest.Builder] = identity,
-  ): Future[HttpResponse[T]] = for {
-    reqBase <- generalRequestModifier(HttpRequest.newBuilder())
-    request = reqModifier(reqBase.uri(resourceId)).build()
-    resp <- httpClient.sendAsync(request, bodyHandler).asScala
-  } yield resp
+  private def missingOrETagged(resp: Response[T]) =
+    if (resp.code == NotFound) Missing else wrapWithETag(resp)
 
-  private def missingOrETagged(resp: HttpResponse[T]) =
-    if (resp.statusCode == HTTP_NOT_FOUND) Missing else wrapWithETag(resp)
+  private def fetchFuture[O](key: Uri, eTag: Option[String], f: Response[T] => O): Future[O] = (for {
+    currentHeaders <- nonConstantHeaders
+    request = baseRequest.headers(currentHeaders ++ eTag.map(Header("If-None-Match", _)) *).get(key)
+    resp <- httpClientResource.use(request.send)
+  } yield f(resp)).unsafeToFuture()
+  
+  def fetch(key: Uri): Future[MissingOrETagged[Response[T]]] =
+    fetchFuture(key, None, missingOrETagged)
 
-  def fetch(key: URI): Future[MissingOrETagged[HttpResponse[T]]] = performFetch(key).map(missingOrETagged)
-
-  def fetchOnlyIfETagChanged(key: URI, eTag: String): Future[Option[MissingOrETagged[HttpResponse[T]]]] =
-    performFetch(key, _.header("If-None-Match", eTag)).map { resp =>
-      Option.when(resp.statusCode != HTTP_NOT_MODIFIED)(missingOrETagged(resp))
-    }
+  def fetchOnlyIfETagChanged(key: Uri, eTag: String): Future[Option[MissingOrETagged[Response[T]]]] =
+    fetchFuture(key, Some(eTag), resp => Option.when(resp.code != NotModified)(missingOrETagged(resp)))
 }

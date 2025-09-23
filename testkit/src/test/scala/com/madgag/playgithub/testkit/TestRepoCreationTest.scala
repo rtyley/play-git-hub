@@ -17,12 +17,17 @@
 package com.madgag.playgithub.testkit
 
 import cats.*
+import cats.data.*
+import cats.effect.unsafe.IORuntime
+import cats.effect.{IO, Resource}
+import cats.syntax.all.*
+import cats.*
 import cats.effect.*
 import cats.effect.testing.scalatest.AsyncIOSpec
 import com.madgag.git.test.pathForResource
 import com.madgag.github.apps.GitHubAppAuth
 import com.madgag.scala.collection.decorators.*
-import com.madgag.scalagithub.AccountAccess
+import com.madgag.scalagithub.{AccountAccess, GitHub}
 import org.scalatest.OptionValues
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AsyncFlatSpec
@@ -38,17 +43,18 @@ class TestRepoCreationTest extends AsyncFlatSpec with AsyncIOSpec with should.Ma
   implicit override val patienceConfig: PatienceConfig =
     PatienceConfig(timeout = scaled(Span(90, Seconds)), interval = scaled(Span(2, Seconds)))
 
-  val accountAccess: AccountAccess =
-    GitHubAppAuth.fromConfigMap(sys.env, prefix = "PLAY_GIT_HUB_TEST").accessSoleInstallation().futureValue.accountAccess()
-
-  val toastRepoCreation = new TestRepoCreation(accountAccess, "funky-times")
+  val testRepoCreationIO: IO[TestRepoCreation] = for {
+    installationAccess <- GitHubAppAuth.fromConfigMap(sys.env, prefix = "PLAY_GIT_HUB_TEST").accessSoleInstallation()
+  } yield new TestRepoCreation(installationAccess.accountAccess(), "funky-times")
 
   it should "reliably create test repos" in {
     for {
-      startConsumption <- accountAccess.gitHub.checkRateLimit().map(_.value.quotaUpdate.consumed)
+      testRepoCreation <- testRepoCreationIO
+      fetchQuotaConsumption = testRepoCreation.testFixtureAccountAccess.gitHub.checkRateLimit().map(_.value.quotaUpdate.consumed)
+      startConsumption <- fetchQuotaConsumption
       reps = 35
-      duration <- toastRepoCreation.createTestRepo(pathForResource("/small-example.git.zip", getClass)).parReplicateA_(reps).timed.map(_._1)
-      endConsumption <- accountAccess.gitHub.checkRateLimit().map(_.value.quotaUpdate.consumed)
+      duration <- testRepoCreation.createTestRepo(pathForResource("/small-example.git.zip", getClass)).parReplicateA_(reps).timed.map(_._1)
+      endConsumption <- fetchQuotaConsumption
     } yield {
       val consumedOverRun = endConsumption - startConsumption
       val consumedPerRep = consumedOverRun.toFloat / reps
@@ -56,10 +62,11 @@ class TestRepoCreationTest extends AsyncFlatSpec with AsyncIOSpec with should.Ma
       consumedPerRep should be <= 8f
     }
   }
-
+  
   it should "delete old test repos" in {
     for {
-      result <- toastRepoCreation.deleteTestRepos()
+      testRepoCreation <- testRepoCreationIO
+      result <- testRepoCreation.deleteTestRepos()
     } yield {
       println(result.mapV(_.map(_.url).mkString(", ")))
       1 shouldBe 1

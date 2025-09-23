@@ -82,11 +82,11 @@ case class Org(
   // GET /orgs/:org/public_members/:username
   val publicMembers = userField("public_members")
 
-  override def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: ExecutionContext): FR[Repo] =
-    github.createOrgRepo(login, cr)
+  override def createRepo(cr: CreateRepo)(using g: GitHub): FR[Repo] =
+    g.createOrgRepo(login, cr)
 
-  override def listRepos(queryParams: (String, String)*)(using github: GitHub): ListStream[Repo] =
-    github.listOrgRepos(login, queryParams*)
+  override def listRepos(queryParams: (String, String)*)(using g: GitHub): ListStream[Repo] =
+    g.listOrgRepos(login, queryParams*)
 }
 
 object Org {

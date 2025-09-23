@@ -8,7 +8,7 @@ ThisBuild / scalaVersion := "3.3.6"
 val scalaGitVersion = "7.0.4"
 val scalaGitTest = "com.madgag.scala-git" %% "scala-git-test" % scalaGitVersion
 val scalaTest = "org.scalatest" %% "scalatest" % "3.2.19"
-val catsEffectTesting = "org.typelevel" %% "cats-effect-testing-scalatest" % "1.6.0"
+val catsEffectTesting = "org.typelevel" %% "cats-effect-testing-scalatest" % "1.7.0"
 
 lazy val artifactProducingSettings = Seq(
   organization := "com.madgag.play-git-hub",

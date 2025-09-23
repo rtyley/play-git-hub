@@ -14,19 +14,20 @@
  * limitations under the License.
  */
 
-package com.madgag.github.apps
+package com.madgag.scalagithub
 
-import cats.effect.IO
-import com.madgag.github.{AccessToken, Expirable}
+import fastparse.ParserInputSource.fromReadable
+import play.api.libs.json.*
 
-import scala.concurrent.{ExecutionContext, Future}
+object TolerantParsingOfIntermittentListWrapper {
 
-class InstallationAccessTokenProvider(
-  githubAppAuth: GitHubAppAuth,
-  installationId: Long
-) extends (() => IO[Expirable[AccessToken]]) {
+  val ListWithoutSingleEntryError = JsonValidationError("wrapper.list.does.not.contain.a.single.entry")
 
-  override def apply(): IO[Expirable[AccessToken]] =
-    githubAppAuth.getInstallationAccessToken(installationId).map(resp => Expirable(resp.token, resp.expires_at))
-
+  def tolerantlyParse[T : Reads](json: JsValue): JsResult[T] = {
+    json.validate[T].recoverWith { jsError =>
+      json.validate[Seq[T]].collect(ListWithoutSingleEntryError) {
+        case singleEntry :: Nil => singleEntry
+      }.recoverWith(_ => jsError)
+    }
+  }
 }

@@ -16,23 +16,24 @@
 
 package com.madgag.scalagithub.model
 
-import com.madgag.git._
+import com.madgag.git.*
 import com.madgag.scalagithub.GitHub
-import com.madgag.scalagithub.GitHub.{FR, _}
+import com.madgag.scalagithub.GitHub.{FR, *}
 import com.madgag.scalagithub.commands.{CreateComment, CreateOrUpdateIssue, MergePullRequest}
 import com.madgag.scalagithub.model.Link.fromListUrl
 import com.madgag.scalagithub.model.PullRequest.CommitOverview
-import okhttp3.Request.Builder
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.revwalk.{RevCommit, RevWalk}
-import play.api.libs.json.Json._
+import play.api.libs.json.Json.*
 import play.api.libs.json.{Json, Reads}
+import sttp.model.*
+import sttp.model.Uri.*
 
 import java.time.ZonedDateTime
-import scala.concurrent.{ExecutionContext => EC}
-import Issue._
-import com.madgag.scalagithub._
-import okhttp3.HttpUrl
+import scala.concurrent.ExecutionContext as EC
+import Issue.*
+import com.madgag.scalagithub.*
+import sttp.model.Uri
 
 case class CommitPointer(
   ref: String,
@@ -109,10 +110,10 @@ case class Issue(
    * https://docs.github.com/en/rest/issues/issues?apiVersion=2022-11-28#update-an-issue
    * PATCH /repos/{owner}/{repo}/issues/{issue_number}
    */
-  def update(update: CreateOrUpdateIssue)(implicit g: GitHub, ec: EC): FR[Issue] =
-    g.executeAndReadJson(_.url(url).patch(toJson(update)))
+  def update(createOrUpdate: CreateOrUpdateIssue)(using g: GitHub): FR[Issue] =
+    g.executeAndReadJson(reqWithBody(createOrUpdate).patch(Uri.unsafeParse(url)))
 
-  def close()(implicit g: GitHub, ec: EC): FR[Issue] = update(CreateOrUpdateIssue(state = Some("closed")))
+  def close()(using g: GitHub): FR[Issue] = update(CreateOrUpdateIssue(state = Some("closed")))
 }
 
 object Issue {
@@ -155,8 +156,8 @@ case class PullRequest(
     * https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#merge-a-pull-request
     * PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge
     */
-  def merge(mergePullRequest: MergePullRequest)(implicit g: GitHub, ec: EC): FR[PullRequest.Merge] =
-    g.put(HttpUrl.get(mergeUrl), mergePullRequest)
+  def merge(mergePullRequest: MergePullRequest)(using g: GitHub): FR[PullRequest.Merge] =
+    g.put(Uri.unsafeParse(mergeUrl), mergePullRequest)
 
   /**
     * https://developer.github.com/v3/pulls/#list-commits-on-a-pull-request

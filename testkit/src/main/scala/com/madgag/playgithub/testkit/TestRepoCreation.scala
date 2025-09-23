@@ -49,7 +49,7 @@ import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.*
 
 class TestRepoCreation(
-  testFixtureAccountAccess: AccountAccess,
+  val testFixtureAccountAccess: AccountAccess,
   testRepoNamePrefix: String
 ) {
   given credsProvider: GitHubCredentials.Provider = testFixtureAccountAccess.credentials
@@ -90,7 +90,7 @@ class TestRepoCreation(
   private def pushLocalRepoToGitHub(
     localGitRepo: FileRepository, testGithubRepo: Repo
   )(implicit ec: ExecutionContext): IO[Unit] = for {
-    creds <- credsProvider()
+    creds <- credsProvider
   } yield {
     configLocalRepoToPushToGitHubRepo(localGitRepo, testGithubRepo)
 
@@ -107,7 +107,7 @@ class TestRepoCreation(
 
     val defaultBranchName = testGithubRepo.default_branch
     if (Option(localGitRepo.findRef(defaultBranchName)).isEmpty) {
-      println(s"Creating a '$defaultBranchName' branch to correspond to the one in ${testGithubRepo.url}")
+      // println(s"Creating a '$defaultBranchName' branch to correspond to the one in ${testGithubRepo.url}")
       localGitRepo.git.branchCreate().setName(defaultBranchName).setStartPoint("HEAD").call()
     }
   }
@@ -120,10 +120,10 @@ class TestRepoCreation(
   } yield ()
 
   private def validateGitHubAPIGives(expectedRefs: RefDatabase, testGitHubRepo: Repo) = {
-    IO.traverse(expectedRefs.branchRefs) { branchRef =>
+    expectedRefs.branchRefs.parTraverse { branchRef =>
       getRefDataFromGitHubApi(testGitHubRepo, branchRef).map(_.result.objectId).map { a =>
-          require(a.toObjectId == branchRef.getObjectId, s"${a.toObjectId} IS NOT ${branchRef.getObjectId}")
-        }
+        require(a.toObjectId == branchRef.getObjectId, s"${a.toObjectId} IS NOT ${branchRef.getObjectId}")
+      }
     }
   }
 
@@ -145,7 +145,7 @@ class TestRepoCreation(
     IO(println(s"retrying '$detail' - delay so far=${retryDetails.cumulativeDelay.toSeconds}s"))
 
   private def performCloneOf(githubRepo: Repo): IO[Repository] = for {
-    creds <- credsProvider()
+    creds <- credsProvider
     clonedRepo <- IO.blocking {
       creds.applyAuthTo[CloneCommand, Git](Git.cloneRepository()).setBare(true).setURI(githubRepo.clone_url)
         .setDirectory(createTempDirectory("test-repo").toFile).call().getRepository

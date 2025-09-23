@@ -37,10 +37,10 @@ case class User(
 ) extends Account {
   override type Self = User
 
-  override def createRepo(cr: CreateRepo)(implicit github: GitHub, ec: EC): FR[Repo] = github.createRepo(cr)
+  override def createRepo(cr: CreateRepo)(using g: GitHub): FR[Repo] = g.createRepo(cr)
 
-  override def listRepos(queryParams: (String, String)*)(using github: GitHub): ListStream[Repo] =
-    github.listRepos(queryParams*)
+  override def listRepos(queryParams: (String, String)*)(using g: GitHub): ListStream[Repo] =
+    g.listRepos(queryParams*)
 }
 
 object User {

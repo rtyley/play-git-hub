@@ -16,19 +16,19 @@
 
 package com.madgag.github.apps
 
+import cats.effect.testing.scalatest.AsyncIOSpec
 import org.scalatest.OptionValues
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
-import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import scala.concurrent.ExecutionContext.Implicits.global
-
-class GitHubAppAuthTest extends AnyFlatSpec with Matchers with OptionValues with ScalaFutures with IntegrationPatience {
+class GitHubAppAuthTest extends AsyncFlatSpec with AsyncIOSpec with Matchers with OptionValues with ScalaFutures with IntegrationPatience {
   val gitHubAppAuth: GitHubAppAuth = GitHubAppAuth.fromConfigMap(sys.env, prefix="PLAY_GIT_HUB_TEST")
 
   it should "be able to request GitHub App installations" in {
-    val installation = gitHubAppAuth.getInstallations().futureValue.head
-    installation.id shouldBe 80021990
-    installation.account.login shouldBe "play-git-hub-test-org"
+    gitHubAppAuth.getSoleInstallation().asserting { installation =>
+      installation.id shouldBe 80021990
+      installation.account.login shouldBe "play-git-hub-test-org"
+    }
   }
 }

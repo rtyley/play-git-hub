@@ -29,7 +29,7 @@ case class LinkTarget(uri: Uri, attributes: Seq[(String, String)]) {
 }
 
 object LinkParser {
-  def url[$: P]: P[Uri] = P("<" ~/ CharsWhile(_ != '>', 1).! ~ ">").map(Uri.apply)
+  def url[$: P]: P[Uri] = P("<" ~/ CharsWhile(_ != '>', 1).! ~ ">").map(Uri.unsafeParse)
 
   def linkParam[$: P]: P[(String, String)] =
     P("; " ~ CharsWhile(_ != '=',1).! ~ "=\"" ~ CharsWhile(_ != '"',1).! ~ "\"" )

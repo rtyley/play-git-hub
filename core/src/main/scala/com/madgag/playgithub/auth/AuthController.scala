@@ -30,7 +30,9 @@ import sttp.model.Uri.*
 import sttp.client4.{WebSocketBackend, quickRequest}
 import sttp.client4.httpclient.cats.HttpClientCatsBackend
 import sttp.client4.{UriContext, *}
+import sttp.model.Uri
 import sttp.model.Uri.*
+import cats.effect.unsafe.implicits.global
 
 trait AuthController extends BaseController {
 
@@ -40,7 +42,7 @@ trait AuthController extends BaseController {
 
   val defaultPage = "/"
 
-  val AccessTokenUrl = uri"https://github.com/login/oauth/access_token"
+  val AccessTokenUrl: Uri = uri"https://github.com/login/oauth/access_token"
 
   def oauthCallback(code: String): Action[AnyContent] = Action.async { req =>
     val accessTokenRequest = quickRequest
@@ -51,19 +53,17 @@ trait AuthController extends BaseController {
       accessToken <- httpClient.use(accessTokenRequest.send).map {
         resp => Json.parse(resp.body).validate[GitHubAuthResponse].get.access_token
       }
-      userResponse <- new GitHub(() => IO.pure(GitHubCredentials(com.madgag.github.AccessToken(accessToken)))).getUser()
+      userResponse <- new GitHub(IO.pure(GitHubCredentials(com.madgag.github.AccessToken(accessToken)))).getUser()
     } yield {
       val user = userResponse.result
       Redirect(req.session.get(AuthenticatedSessions.RedirectToPathAfterAuthKey).getOrElse(defaultPage)).withSession(
         AccessToken.SessionKey -> accessToken,
         MinimalGHPerson(user.login, user.avatar_url).sessionTuple
       )
-    }).unsafeToFuture()(cats.effect.unsafe.implicits.global)
+    }).unsafeToFuture()
   }
 
   def logout: Action[AnyContent] = Action {
     Redirect(defaultPage).withNewSession
   }
 }
-
-

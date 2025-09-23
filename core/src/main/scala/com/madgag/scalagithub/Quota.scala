@@ -14,19 +14,13 @@
  * limitations under the License.
  */
 
-package com.madgag.github.apps
+package com.madgag.scalagithub
 
-import cats.effect.IO
-import com.madgag.github.{AccessToken, Expirable}
+import com.madgag.ratelimitstatus.RateLimit
 
-import scala.concurrent.{ExecutionContext, Future}
-
-class InstallationAccessTokenProvider(
-  githubAppAuth: GitHubAppAuth,
-  installationId: Long
-) extends (() => IO[Expirable[AccessToken]]) {
-
-  override def apply(): IO[Expirable[AccessToken]] =
-    githubAppAuth.getInstallationAccessToken(installationId).map(resp => Expirable(resp.token, resp.expires_at))
-
+case class Quota(
+  consumed: Int,
+  statusOpt: Option[RateLimit.Status]
+) {
+  val hitOrMiss = if (consumed > 0) "MISS" else "HIT "
 }

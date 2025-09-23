@@ -34,23 +34,25 @@ case class AccessToken(value: String) extends AnyVal
 object AccessToken {
   implicit val reads: Reads[AccessToken] = JsPath.read[String].map(AccessToken(_))
 
-  class Cache(provider: IO[Expirable[AccessToken]])(using IORuntime)
-    extends GitHubCredentials.Provider {
-
-    private val cache: AsyncLoadingCache[Unit, Expirable[GitHubCredentials]] = Scaffeine()
+  def cache(provider: IO[Expirable[AccessToken]])(using IORuntime): GitHubCredentials.Provider = {
+    val cache: AsyncLoadingCache[Unit, Expirable[GitHubCredentials]] = Scaffeine()
       .maximumSize(1)
       .expireAfter[Unit, Expirable[GitHubCredentials]](
         create = (_, token) => timeUntilNearExpirationOf(token),
         update = (_, token, _) => timeUntilNearExpirationOf(token),
         read = (_, _, currentDuration) => currentDuration
       )
-      .buildAsyncFuture(_ => provider.map(_.map(GitHubCredentials(_))).unsafeToFuture()
+      .buildAsyncFuture {
+        _ =>
+          println("No cached access token...")
+          provider.map(_.map(GitHubCredentials(_))).unsafeToFuture()
+      }
 
-    override def apply(): IO[GitHubCredentials] = IO.fromFuture(IO(cache.get(()).map(_.value)))
+    IO.fromFuture(IO(cache.get(()))).map(_.value)
   }
 
   object Cache {
-    def timeUntilNearExpirationOf(expirable: Expirable[_])(implicit clock: Clock = systemUTC): FiniteDuration =
+    def timeUntilNearExpirationOf(expirable: Expirable[_])(using clock: Clock = systemUTC): FiniteDuration =
       Duration.between(clock.instant(), expirable.expires).toScala * 9 div 10
   }
 }

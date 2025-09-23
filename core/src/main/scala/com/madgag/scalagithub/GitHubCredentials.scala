@@ -46,10 +46,10 @@ case class GitHubCredentials(accessToken: AccessToken) {
 }
 
 object GitHubCredentials {
-  type Provider = () => IO[GitHubCredentials]
+  type Provider = IO[GitHubCredentials]
 
   object Provider {
-    def fromStatic(accessToken: AccessToken): Provider = () => IO.pure(GitHubCredentials(accessToken))
+    def fromStatic(accessToken: AccessToken): Provider = IO.pure(GitHubCredentials(accessToken))
   }
 }
 

@@ -42,11 +42,11 @@ trait Account {
 
   lazy val displayName: String = name.filter(_.nonEmpty).getOrElse(atLogin)
 
-  def reFetch()(using g: GitHub, ec: EC, ev: Reads[Self]): FR[Self]  = g.getAndCache[Self](Uri(url))
+  def reFetch()(using g: GitHub, ec: EC, ev: Reads[Self]): FR[Self]  = g.getAndCache[Self](Uri.unsafeParse(url))
 
-  def createRepo(cr: CreateRepo)(using github: GitHub): FR[Repo]
+  def createRepo(cr: CreateRepo)(using g: GitHub): FR[Repo]
 
-  def listRepos(queryParams: (String, String)*)(using github: GitHub): ListStream[Repo]
+  def listRepos(queryParams: (String, String)*)(using g: GitHub): ListStream[Repo]
 }
 
 object Account {

@@ -20,7 +20,7 @@ import com.madgag.ratelimitstatus.{QuotaUpdate, RateLimit}
 import com.madgag.rfc5988link.{LinkParser, LinkTarget}
 import fastparse.parse
 import play.api.http.Status.NOT_MODIFIED
-import sttp.model.Uri
+import sttp.model.{HasHeaders, Header, Uri}
 
 import java.time.Duration.ofHours
 import java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME
@@ -33,11 +33,11 @@ object ResponseMeta {
   
   val GitHubRateLimit: RateLimit = RateLimit(ofHours(1))
 
-  def rateLimitStatusFrom(headers: java.net.http.HttpHeaders): Option[RateLimit.Status] = for {
-    remaining <- headers.firstValue("X-RateLimit-Remaining").toScala
-    limit <- headers.firstValue("X-RateLimit-Limit").toScala
-    reset <- headers.firstValue("X-RateLimit-Reset").toScala
-    date <- headers.firstValue("Date").toScala
+  def rateLimitStatusFrom(headers: HasHeaders): Option[RateLimit.Status] = for {
+    remaining <- headers.header("X-RateLimit-Remaining")
+    limit <- headers.header("X-RateLimit-Limit")
+    reset <- headers.header("X-RateLimit-Reset")
+    date <- headers.header("Date")
   } yield GitHubRateLimit.statusFor(QuotaUpdate(
     remaining = remaining.toInt,
     limit = limit.toInt,
@@ -45,13 +45,13 @@ object ResponseMeta {
     capturedAt = ZonedDateTime.parse(date, RFC_1123_DATE_TIME).toInstant
   ))
 
-  def rateLimitFrom(notModified: Boolean, headers: Option[java.net.http.HttpHeaders]): Quota = Quota(
+  def rateLimitFrom(notModified: Boolean, headers: Option[HasHeaders]): Quota = Quota(
     consumed = if (notModified) 1 else 0,
     headers.flatMap(rateLimitStatusFrom)
   )
 
-  def requestScopesFrom(headers: java.net.http.HttpHeaders): Option[RequestScopes] = {
-    def scopes(h: String): Option[Set[String]] = headers.firstValue(h).toScala.map(_.split(',').map(_.trim).toSet)
+  def requestScopesFrom(headers: HasHeaders): Option[RequestScopes] = {
+    def scopes(h: String): Option[Set[String]] = headers.header(h).map(_.split(',').map(_.trim).toSet)
 
     for {
       oAuthScopes <- scopes("X-OAuth-Scopes")
@@ -59,15 +59,13 @@ object ResponseMeta {
     } yield RequestScopes(oAuthScopes, acceptedOAuthScopes)
   }
 
-  def linksFrom(headers: java.net.http.HttpHeaders): Seq[LinkTarget] = for {
-    linkHeader <- headers.allValues("Link").asScala.toSeq
-    linkTargets <- parse(linkHeader, LinkParser.linkValues(_)).get.value
-  } yield linkTargets
+  def linksFrom(headers: HasHeaders): Seq[LinkTarget] =
+    headers.headers("Link").flatMap(parse(_, LinkParser.linkValues(_)).get.value)
   
-  def from(resp: java.net.http.HttpResponse[_]) = ResponseMeta(
-    rateLimitFrom(resp.statusCode == NOT_MODIFIED, Some(resp.headers)),
-    requestScopesFrom(resp.headers),
-    linksFrom(resp.headers)
+  def from(resp: sttp.client4.Response[_]) = ResponseMeta(
+    rateLimitFrom(resp.code.code == NOT_MODIFIED, Some(resp)),
+    requestScopesFrom(resp),
+    linksFrom(resp)
   )
 }
 

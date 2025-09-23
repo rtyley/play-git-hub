@@ -16,6 +16,7 @@
 
 package com.madgag.scalagithub
 
+import cats.effect.unsafe.IORuntime
 import com.madgag.scalagithub.GitHubCredentials.Provider
 import com.madgag.scalagithub.model.Account
 
@@ -24,6 +25,6 @@ import scala.concurrent.ExecutionContext
 class AccountAccess(
   val account: Account,
   val credentials: Provider
-)(using ExecutionContext) {
+)(using ExecutionContext, IORuntime) {
   val gitHub = new GitHub(credentials)
 }
