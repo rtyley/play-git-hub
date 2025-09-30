@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Roberto Tyley
+ * Copyright 2015 Roberto Tyley
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,29 @@
  * limitations under the License.
  */
 
-package com.madgag.scalagithub
+package com.madgag.scalagithub.model
 
-import play.api.libs.json.*
+import com.madgag.scalagithub.*
+import org.eclipse.jgit.lib.ObjectId
+import play.api.libs.json.{Json, OWrites, Reads}
 
-object TolerantParsingOfIntermittentListWrapper {
+case class Tag(
+  tag: String,
+  sha: ObjectId,
+  message: String
+)
 
-  val ListWithoutSingleEntryError = JsonValidationError("wrapper.list.does.not.contain.a.single.entry")
-
-  def tolerantlyParse[T : Reads](json: JsValue): JsResult[T] = {
-    json.validate[T].recoverWith { jsError =>
-      json.validate[Seq[T]].collect(ListWithoutSingleEntryError) {
-        case singleEntry :: Nil => singleEntry
-      }.recoverWith(_ => jsError)
-    }
+object Tag {
+  case class Create(
+    tag: String,
+    message: String,
+    `object`: ObjectId,
+    `type`: String
+  )
+  
+  object Create {
+    given OWrites[Create] = Json.writes
   }
+
+  given Reads[Tag] = Json.reads
 }

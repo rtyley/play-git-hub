@@ -35,7 +35,7 @@ object Implicits {
   }
 
   implicit class RichFuture[S](f: Future[S]) {
-    lazy val trying = {
+    lazy val trying: Future[Try[S]] = {
       val p = Promise[Try[S]]()
       f.onComplete { case t => p.complete(Success(t)) }
       p.future

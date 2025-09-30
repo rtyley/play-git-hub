@@ -19,6 +19,7 @@ package com.madgag.scalagithub.model
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should
 import play.api.libs.json.{JsResult, Json}
+import sttp.client4.*
 
 class PullRequestTest extends AnyFlatSpec with should.Matchers {
   "PullRequest" should "be successfully parsed" in {
@@ -26,5 +27,9 @@ class PullRequestTest extends AnyFlatSpec with should.Matchers {
     val prs: JsResult[Seq[PullRequest]] = Json.fromJson[Seq[PullRequest]](json)
 
     prs.get should have size 9
+  }
+
+  "PullRequest.Id" should "be able to parse from a HTML web url" in {
+    PullRequest.Id.from(uri"https://github.com/rtyley/bfg-repo-cleaner/pull/527") shouldBe PullRequest.Id(RepoId("rtyley","bfg-repo-cleaner"), 527)
   }
 }

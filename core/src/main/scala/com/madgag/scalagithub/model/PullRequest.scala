@@ -69,21 +69,6 @@ trait HasLabels {
   // support add / remove ?
 }
 
-object PullRequestId {
-  def from(slug: String) = {
-    val parts = slug.split('/')
-    require(parts.length == 4)
-    require(parts(2) == "pull")
-
-    PullRequestId(RepoId(parts(0), parts(1)), parts(3).toInt)
-  }
-}
-
-
-case class PullRequestId(repo: RepoId, num: Int) {
-  lazy val slug = s"${repo.fullName}/pull/$num"
-}
-
 trait Createable {
   type Creation
 }
@@ -146,7 +131,7 @@ case class PullRequest(
 ) extends Commentable with HasLabels {
   val baseRepo = base.repo.get // base repo is always available, unlike head repo which might be gone
 
-  val prId = PullRequestId(baseRepo.repoId, number)
+  val prId = PullRequest.Id(baseRepo.repoId, number)
 
   val mergeUrl = s"$url/merge"
 
@@ -179,6 +164,22 @@ case class PullRequest(
 }
 
 object PullRequest {
+
+  object Id {
+    def fromTrailingPathSegments(parts: Seq[String]): Id = {
+      require(parts.length == 4)
+      require(parts(2) == "pull")
+      Id(RepoId(parts(0), parts(1)), parts(3).toInt)
+    }
+
+    def from(slug: String): Id = fromTrailingPathSegments(slug.split('/'))
+
+    def from(httpUri: Uri): Id = fromTrailingPathSegments(httpUri.path.takeRight(4))
+  }
+
+  case class Id(repo: RepoId, num: Int) {
+    lazy val slug = s"${repo.fullName}/pull/$num" // Used in GitHub HTML UI urls, it does *not* match the REST API
+  }
 
   case class CommitOverview(
     url: String,

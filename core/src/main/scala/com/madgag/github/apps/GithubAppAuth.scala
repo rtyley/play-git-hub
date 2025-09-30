@@ -113,10 +113,16 @@ case class InstallationAccess(
 }
 
 object InstallationAccess {
-  def from(gitHubAppAuth: GitHubAppAuth, installation: Installation)(using IORuntime): InstallationAccess = InstallationAccess(
-    installation,
-    AccessToken.cache(gitHubAppAuth.getInstallationAccessToken(installation.id).map(resp => Expirable(resp.token, resp.expires_at)))
-  )
+  def from(gitHubAppAuth: GitHubAppAuth, installation: Installation)(using IORuntime): InstallationAccess = {
+    val accessTokenProvider = gitHubAppAuth.getInstallationAccessToken(installation.id).map {
+      resp => Expirable(resp.token, resp.expires_at)
+    }
+    
+    InstallationAccess(
+      installation,
+      AccessToken.cache(accessTokenProvider)
+    )
+  }
 }
 
 case class InstallationTokenResponse(

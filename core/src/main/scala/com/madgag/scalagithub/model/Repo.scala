@@ -66,6 +66,7 @@ case class Repo(
   pulls_url: String,
   commits_url: String,
   contents_url: String,
+  git_tags_url: String,
   trees_url: String,
   default_branch: String,
   `private`: Boolean,
@@ -86,6 +87,9 @@ case class Repo(
   val refs = new RepoRefs(git_refs_url)
   // https://developer.github.com/v3/git/refs/#get-a-reference
   // https://developer.github.com/v3/git/refs/#create-a-reference
+
+  val tags = new CCreator[Tag, String, Tag.Create](Link.fromSuffixedUrl[String](git_tags_url, "/sha"))
+    with CanGet[Tag, String]
 
   val pullRequests = new CCreator[PullRequest, Int, CreatePullRequest](Link.fromSuffixedUrl(pulls_url, "/number"))
     with CanGetAndList[PullRequest, Int]
@@ -261,8 +265,6 @@ case class Permissions(
 object Permissions {
   implicit val readsPermissions: Reads[Permissions] = Json.reads[Permissions]
 }
-
-
 
 object Repo {
 

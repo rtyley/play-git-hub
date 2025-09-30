@@ -157,7 +157,12 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(using EC, IORuntime) {
   )
 
   def getAndCache[T: Reads](uri: Uri): FR[T] =
-    IO.fromFuture(IO(etagCache.get(UrlAndParser(uri, implicitly[Reads[T]])).map(_.get.asInstanceOf[GitHubResponse[T]])))
+    IO.fromFuture(IO(etagCache.get(UrlAndParser(uri, implicitly[Reads[T]])).map { gitHubResponseOfAnyOpt =>
+      if (gitHubResponseOfAnyOpt.isEmpty) {
+        println(s"Nothing found for: $uri")
+      }
+      gitHubResponseOfAnyOpt.get.asInstanceOf[GitHubResponse[T]]
+    }))
 
   def create[CC : Writes, Res: Reads](uri: Uri, cc: CC) : FR[Res] = executeAndReadJson[Res](reqWithBody(cc).post(uri))
 
@@ -200,6 +205,13 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(using EC, IORuntime) {
     * GET /repos/{owner}/{repo}
     */
   def getRepo(repoId: RepoId): FR[Repo] = getAndCache(apiUri.addPath("repos", repoId.owner, repoId.name))
+
+  /**
+   * https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#get-a-pull-request
+   * GET /repos/{owner}/{repo}/pulls/{pull_number}
+   */
+  def getPullRequest(prId: PullRequest.Id): FR[PullRequest] =
+    getAndCache(apiUri.addPath("repos", prId.repo.owner, prId.repo.name, "pulls", prId.num.toString))
 
   /**
     * https://docs.github.com/en/rest/orgs/orgs?apiVersion=2022-11-28#get-an-organization
