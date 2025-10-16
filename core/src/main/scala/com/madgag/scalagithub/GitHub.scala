@@ -23,6 +23,7 @@ import com.gu.etagcaching.FreshnessPolicy.AlwaysWaitForRefreshedValue
 import com.gu.etagcaching.fetching.Fetching
 import com.gu.etagcaching.{ETagCache, FreshnessPolicy}
 import com.madgag.ratelimitstatus.RateLimit
+import com.madgag.scalagithub.TolerantParsingOfIntermittentListWrapper.tolerantlyParse
 import com.madgag.scalagithub.commands.*
 import com.madgag.scalagithub.model.*
 import fs2.Chunk
@@ -100,7 +101,7 @@ object GitHub {
     Header("Accept", "application/vnd.github+json"),
     Header("X-GitHub-Api-Version", "2022-11-28")
   )
-  
+
   case class UrlAndParser(uri: Uri, parser: Reads[_])
 }
 
@@ -140,7 +141,7 @@ class GitHub(ghCredentials: GitHubCredentials.Provider)(using EC, IORuntime) {
       response.map(resp => {
         val jsResult: JsResult[_] = {
           val jsValue = Json.parse(resp)
-          jsValue.validate(urlAndParser.parser)
+          tolerantlyParse(jsValue)(urlAndParser.parser)
         }
         if (jsResult.isError) {
           println(urlAndParser.uri)
