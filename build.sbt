@@ -9,14 +9,14 @@ ThisBuild / crossScalaVersions := Seq(
   "2.13.16"
 )
 
-val scalaGitVersion = "7.0.3"
+val scalaGitVersion = "7.0.4"
 val scalaGitTest = "com.madgag.scala-git" %% "scala-git-test" % scalaGitVersion
 val scalaTest = "org.scalatest" %% "scalatest" % "3.2.19"
 
 lazy val artifactProducingSettings = Seq(
   organization := "com.madgag.play-git-hub",
   licenses := Seq(License.Apache2),
-  scalacOptions := Seq("-deprecation", "-release:11"),
+  scalacOptions := Seq("-deprecation", "-release:21"),
   Test / testOptions +=
     Tests.Argument(TestFrameworks.ScalaTest, "-u", s"test-results/scala-${scalaVersion.value}", "-o")
 )
@@ -26,7 +26,7 @@ lazy val core = (project in file("core")).settings(artifactProducingSettings).se
     "com.madgag" %% "rate-limit-status" % "1.0.1",
     "com.github.blemale" %% "scaffeine" % "5.3.0",
     "org.bouncycastle" % "bcpkix-jdk15on" % "1.70",
-    "org.playframework" %% "play" % "3.0.8",
+    "org.playframework" %% "play" % "3.0.9",
     "com.squareup.okhttp3" % "okhttp" % "4.12.0",
     "com.lihaoyi" %% "fastparse" % "3.1.1",
     "com.madgag" %% "scala-collection-plus" % "1.0.0",
@@ -49,7 +49,7 @@ lazy val `play-git-hub-root` = (project in file(".")).aggregate(core, testkit).s
 )
 
 publish / skip := true
-// releaseVersion := ReleaseVersion.fromAggregatedAssessedCompatibilityWithLatestRelease().value
+releaseVersion := ReleaseVersion.fromAggregatedAssessedCompatibilityWithLatestRelease().value
 releaseProcess := Seq[ReleaseStep](
   checkSnapshotDependencies,
   inquireVersions,
