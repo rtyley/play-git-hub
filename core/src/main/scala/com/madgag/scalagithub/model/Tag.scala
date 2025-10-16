@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Roberto Tyley
+ * Copyright 2015 Roberto Tyley
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,29 @@
  * limitations under the License.
  */
 
-package com.madgag.scalagithub
+package com.madgag.scalagithub.model
 
-import com.madgag.scalagithub.GitHubCredentials.Provider
-import com.madgag.scalagithub.model.Account
+import com.madgag.scalagithub.*
+import org.eclipse.jgit.lib.ObjectId
+import play.api.libs.json.{Json, OWrites, Reads}
 
-case class AccountCredentials(
-  account: Account,
-  credentials: Provider
-) {
-  val gitHub = new GitHub(credentials)
+case class Tag(
+  tag: String,
+  sha: ObjectId,
+  message: String
+)
+
+object Tag {
+  case class Create(
+    tag: String,
+    message: String,
+    `object`: ObjectId,
+    `type`: String
+  )
+  
+  object Create {
+    given OWrites[Create] = Json.writes
+  }
+
+  given Reads[Tag] = Json.reads
 }
