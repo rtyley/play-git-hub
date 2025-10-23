@@ -22,6 +22,7 @@ import com.gu.etagcaching.ETagCache
 import com.gu.etagcaching.FreshnessPolicy.AlwaysWaitForRefreshedValue
 import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.GitHubHttp.{PermanentHeaders, UrlAndParser}
+import com.madgag.scalagithub.TolerantParsingOfIntermittentListWrapper.tolerantlyParse
 import play.api.libs.json.{JsResult, Json, Reads}
 import sttp.client4.*
 import sttp.model.{Header, Uri}
@@ -63,7 +64,7 @@ class GitHubHttp(
         {
           val jsResult: JsResult[_] = {
             val jsValue = Json.parse(httpResp.body)
-            jsValue.validate(urlAndParser.parser)
+            tolerantlyParse(jsValue)(urlAndParser.parser)
           }
           if (jsResult.isError) {
             println(urlAndParser.uri)
