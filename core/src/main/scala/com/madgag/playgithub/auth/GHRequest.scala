@@ -16,20 +16,23 @@
 
 package com.madgag.playgithub.auth
 
+import cats.effect.IO
+import cats.effect.std.Dispatcher
+import cats.effect.unsafe.IORuntime
+import com.madgag.scalagithub.GitHub.ListStream
+import com.madgag.scalagithub.model.Email
 import com.madgag.scalagithub.{GitHub, GitHubCredentials}
-import play.api.mvc._
+import play.api.mvc.*
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
-class GHRequest[A](val gitHubCredentials: GitHubCredentials, request: Request[A]) extends WrappedRequest[A](request) {
-  val gitHub = new GitHub(() => Future.successful(gitHubCredentials))
-
+class GHRequest[A](val gitHub: GitHub, request: Request[A])(using ec: ExecutionContext) extends WrappedRequest[A](request) {
+  
   lazy val userF = gitHub.getUser().map(_.result)
 
-  lazy val userEmailsF = gitHub.getUserEmails()
+  lazy val userEmailsF: ListStream[Email] = gitHub.getUserEmails()
 
-  lazy val userPrimaryEmailF = userEmailsF.map(_.find(_.primary).get)
+  lazy val userPrimaryEmailF: IO[Email] = userEmailsF.find(_.primary).compile.toList.map(_.head)
 
   lazy val userTeamsF = gitHub.getUserTeams()
 
