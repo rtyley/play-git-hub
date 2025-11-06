@@ -143,6 +143,7 @@ class TestRepoCreation(
 
   private def getRefDataFromGitHubApi(testGithubRepo: Repo, branchRef: Ref)(using GitHub): FR[model.Ref] =
     testGithubRepo.refs.get(branchRef): IO[GitHubResponse[model.Ref]]
+  .retryingOnErrors(retryPolicy, retryOnAllErrors(logRetry(s"get ${branchRef.getName}")))
 
   private def logRetry(detail: String): (Throwable, RetryDetails) => IO[Unit] = (_, retryDetails) =>
     IO.println(s"retrying '$detail' - delay so far=${retryDetails.cumulativeDelay.toSeconds}s")
