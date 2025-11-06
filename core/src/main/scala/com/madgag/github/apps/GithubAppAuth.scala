@@ -6,8 +6,9 @@ import cats.effect.std.Dispatcher
 import cats.syntax.all.*
 import com.madgag.github.{AccessToken, Expirable}
 import com.madgag.scalagithub.GitHub.*
+import com.madgag.scalagithub.GitHubCredentials.Provider
 import com.madgag.scalagithub.model.{Account, GitHubApp, Installation}
-import com.madgag.scalagithub.{AccountAccess, GitHub, GitHubCredentials}
+import com.madgag.scalagithub.{AccountAccess, GitHub, GitHubAppAccess, GitHubCredentials}
 import play.api.Logging
 import play.api.libs.json.{Json, Reads}
 import sttp.client4.*
@@ -59,7 +60,7 @@ class GitHubAppAuth(jwts: GitHubAppJWTs, httpClient: Backend[IO]) extends Loggin
   /**
    * [[https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#get-the-authenticated-app]]
    */
-  def getAuthenticatedApp(): IO[GitHubApp] = executeGet[GitHubApp]("app")
+  val getAuthenticatedApp: IO[GitHubApp] = executeGet("app")
 
   /**
    * [[https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#get-an-installation-for-the-authenticated-app]]
@@ -72,47 +73,33 @@ class GitHubAppAuth(jwts: GitHubAppJWTs, httpClient: Backend[IO]) extends Loggin
   /**
    * [[https://docs.github.com/en/rest/apps/apps?apiVersion=2022-11-28#list-installations-for-the-authenticated-app]]
    */
-  def getInstallations(): IO[Seq[Installation]] = executeGet[Seq[Installation]]("app", "installations")
+  val getInstallations: IO[Seq[Installation]] = executeGet[Seq[Installation]]("app", "installations")
 
   def getSoleInstallation(installationId: Option[Long] = None): IO[Installation] =
     installationId.fold(for {
-      installations <- getInstallations()
+      installations <- getInstallations
     } yield {
       require(installations.size == 1, s"Found ${installations.size} installations of this GitHub App, should be precisely ONE.")
       installations.head
     })(getInstallation)
 
-  def accessSoleInstallation(installationId: Option[Long] = None)(using Dispatcher[IO]): IO[InstallationAccess] = for {
+  def accessSoleInstallation(installationId: Option[Long] = None)(using Dispatcher[IO]): IO[GitHubAppAccess] = for {
+    app <- getAuthenticatedApp
     installation <- getSoleInstallation(installationId)
-  } yield InstallationAccess.from(this, installation)
-}
-
-case class InstallationAccess(
-  installation: Installation,
-  credentials: GitHubCredentials.Provider
-) {
-  val installedOnAccount: Account = installation.account
+  } yield GitHubAppAccess(app, installation) // InstallationAccess.credentialsProviderFor(this, installation)
   
-  def accountAccess()(using factory: GitHub.Factory): IO[AccountAccess] = for {
-    client <- factory.clientFor(credentials)
-  } yield AccountAccess(installation.account, credentials, client)
 }
 
 object InstallationAccess {
-  def from(gitHubAppAuth: GitHubAppAuth, installation: Installation)(using Dispatcher[IO]): InstallationAccess =
-    InstallationAccess(
-      installation,
-      AccessToken.cache(gitHubAppAuth.getInstallationAccessToken(installation.id).map {
-        resp => Expirable(resp.token, resp.expires_at)
-      })
-    )
+  def credentialsProviderFor(gitHubAppAuth: GitHubAppAuth, installation: Installation)(using Dispatcher[IO]): Provider = {
+    AccessToken.cache(gitHubAppAuth.getInstallationAccessToken(installation.id).map {
+      resp => Expirable(resp.token, resp.expires_at)
+    })
+  }
 }
 
-case class InstallationTokenResponse(
-  token: AccessToken,
-  expires_at: Instant
-)
+case class InstallationTokenResponse(token: AccessToken, expires_at: Instant)
 
 object InstallationTokenResponse {
-  implicit val reads: Reads[InstallationTokenResponse] = Json.reads
+  given Reads[InstallationTokenResponse] = Json.reads
 }

@@ -21,19 +21,23 @@ import cats.effect.*
 import cats.effect.std.Dispatcher
 import com.madgag.git.test.pathForResource
 import com.madgag.github.apps.{GitHubAppAuth, GitHubAppJWTs, InstallationAccess}
+import com.madgag.scalagithub.{ClientWithAccess, GitHub, GitHubAppAccess}
 import org.scalatest.OptionValues
 import sttp.client4.httpclient.cats.HttpClientCatsBackend
 import weaver.IOSuite
 
+import scala.concurrent.ExecutionContext.Implicits.global
+
 object TestRepoCreationTest extends IOSuite with OptionValues {
 
-  type Res = InstallationAccess
+  type Res = ClientWithAccess[GitHubAppAccess]
 
   def sharedResource: Resource[IO, Res] = for {
     httpBackend <- HttpClientCatsBackend.resource[IO]()
     dispatcher <- Dispatcher.parallel[IO]
-    installationAccess <- Resource.eval(GitHubAppAuth(GitHubAppJWTs.fromConfigMap(sys.env, prefix = "PLAY_GIT_HUB_TEST"), httpBackend).accessSoleInstallation()(using dispatcher))
-  } yield installationAccess
+    factory <- GitHub.Factory()
+    clientWithContext <- Resource.eval(factory.accessSoleAppInstallation(GitHubAppJWTs.fromConfigMap(sys.env, prefix = "PLAY_GIT_HUB_TEST")))
+  } yield clientWithContext
 
   test("reliably create test repos") { installationAccess =>
     TestRepoCreation(installationAccess, "test-creating-test-repos").use { testRepoCreation =>
@@ -48,7 +52,7 @@ object TestRepoCreationTest extends IOSuite with OptionValues {
         val fetchesExecutedOverRun = endCount - startCount
         val consumedPerRep = fetchesExecutedOverRun.toFloat / reps
         println(f"Consumed $fetchesExecutedOverRun in ${duration.toMillis}ms - $consumedPerRep%.1f per rep")
-        expect(clue(consumedPerRep) <= 7f)
+        expect(clue(consumedPerRep) <= 6f)
       }
     }
   }

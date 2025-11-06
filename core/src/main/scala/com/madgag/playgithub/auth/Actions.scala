@@ -32,7 +32,7 @@ object Actions {
   type AuthRequest[A] = AuthenticatedRequest[A, GitHubCredentials]
 
   class GitHubAuthenticatedAction(scopes: Seq[String], parser: BodyParser[AnyContent])(
-    implicit ec: ExecutionContext, authClient: Client, accessTokenProvider: AccessToken.Provider
+    using ec: ExecutionContext, authClient: Client, accessTokenProvider: AccessToken.Provider
   ) extends AuthenticatedBuilder[GitHubCredentials](
     { (req: RequestHeader) => accessTokenProvider(req).map(accessKey => GitHubCredentials(com.madgag.github.AccessToken(accessKey))) },
     parser,
@@ -41,9 +41,12 @@ object Actions {
   
   class AuthenticatedActionToGHRequest(using val executionContext: ExecutionContext, githubFactory: GitHub.Factory)
     extends ActionTransformer[AuthRequest, GHRequest] {
-    def transform[A](request: AuthRequest[A]) = githubFactory.dispatcher.unsafeToFuture(for {
-      client <- githubFactory.clientFor(IO.pure(request.user))
-    } yield new GHRequest[A](client, request))
+    def transform[A](request: AuthRequest[A]) = {
+      val gitHubCredentials: GitHubCredentials = request.user // Counter-intuitive but correct...!
+      githubFactory.dispatcher.unsafeToFuture(for {
+        client <- githubFactory.clientFor(IO.pure(gitHubCredentials))
+      } yield new GHRequest[A](client, request))
+    }
   }
   
   def gitHubAction(scopes: Seq[String],parser: BodyParser[AnyContent])(using Client, AccessToken.Provider, ExecutionContext, GitHub.Factory) =

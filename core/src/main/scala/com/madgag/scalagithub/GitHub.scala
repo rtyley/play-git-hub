@@ -19,12 +19,14 @@ package com.madgag.scalagithub
 import cats.effect.{IO, Resource}
 import cats.effect.kernel.Resource
 import cats.effect.std.Dispatcher
-import com.madgag.github.apps.{GitHubAppAuth, GitHubAppJWTs}
+import com.madgag.github.AccessToken
+import com.madgag.github.apps.{GitHubAppAuth, GitHubAppJWTs, InstallationAccess}
 import com.madgag.ratelimitstatus.RateLimit
 import com.madgag.scalagithub.commands.*
 import com.madgag.scalagithub.model.*
 import fs2.Chunk
 import fs2.Stream.unfoldChunkLoopEval
+import org.eclipse.jgit.transport.CredentialsProvider
 import play.api.Logger
 import play.api.libs.json.*
 import play.api.libs.json.Json.toJson
@@ -54,24 +56,35 @@ object GitHubResponse {
 
 object GitHub {
 
-  class Factory(httpClient: Backend[IO], val dispatcher: Dispatcher[IO])(using parsingEC: EC) {
-    def clientFor(ghCredentials: GitHubCredentials.Provider): IO[GitHub] = for {
-      fetchCount <- cats.effect.kernel.Ref[IO].of(0L)
-    } yield new GitHub(new GitHubHttp(ghCredentials, httpClient, dispatcher, fetchCount))
+  class Factory(httpClient: Backend[IO])(using parsingEC: EC, val dispatcher: Dispatcher[IO]) {
+    def clientFor(credentialsProvider: GitHubCredentials.Provider): IO[GitHub] = for {
+      gitHubHttp <- GitHubHttp(credentialsProvider, httpClient, dispatcher)
+      gitHub = new GitHub(gitHubHttp)
+    } yield gitHub
 
-    def accessSoleAppInstallation(gitHubAppJWTs: GitHubAppJWTs)(using parsingEC: EC): IO[AccountAccess] = for {
-      installationAccess <- GitHubAppAuth(gitHubAppJWTs, httpClient).accessSoleInstallation()(using dispatcher)
-      accountAccess <- installationAccess.accountAccess()(using this)
-    } yield accountAccess
+    def accessWithUserToken(accessToken: AccessToken): IO[ClientWithAccess[UserTokenAccess]] = {
+      val credsProvider = GitHubCredentials.Provider.fromStatic(accessToken)
+      for {
+        gitHub <- clientFor(credsProvider)
+        user <- gitHub.getUser()
+      } yield new ClientWithAccess(gitHub, credsProvider, UserTokenAccess(user.result))
+    }
+
+    def accessSoleAppInstallation(gitHubAppJWTs: GitHubAppJWTs): IO[ClientWithAccess[GitHubAppAccess]] = {
+      val gitHubAppAuth = GitHubAppAuth(gitHubAppJWTs, httpClient)
+      for {
+        accountAccess <- gitHubAppAuth.accessSoleInstallation()(using dispatcher)
+        credsProvider = InstallationAccess.credentialsProviderFor(gitHubAppAuth, accountAccess.installation)
+        gitHub <- clientFor(credsProvider)
+      } yield new ClientWithAccess(gitHub, credsProvider, accountAccess)
+    }
   }
 
   object Factory {
     def apply()(using parsingEC: EC): Resource[IO, Factory] = for {
       httpClient <- HttpClientCatsBackend.resource[IO]()
       dispatcher <- Dispatcher.parallel[IO]
-    } yield new Factory(httpClient, dispatcher)
-    
-
+    } yield new Factory(httpClient)(using parsingEC, dispatcher)
   }
 
 

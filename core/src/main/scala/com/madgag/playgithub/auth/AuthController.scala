@@ -55,10 +55,9 @@ trait AuthController extends BaseController {
       accessToken <- accessTokenRequest.send(httpClient).map {
         resp => Json.parse(resp.body).validate[GitHubAuthResponse].get.access_token
       }
-      client <- gitHubFactory.clientFor(GitHubCredentials.Provider.fromStatic(com.madgag.github.AccessToken(accessToken)))
-      userResponse <- client.getUser() // TODO Resource?
+      clientWithContext <- gitHubFactory.accessWithUserToken(com.madgag.github.AccessToken(accessToken)) // TODO - resource?
     } yield {
-      val user = userResponse.result
+      val user = clientWithContext.accountAccess.user
       Redirect(req.session.get(AuthenticatedSessions.RedirectToPathAfterAuthKey).getOrElse(defaultPage)).withSession(
         AccessToken.SessionKey -> accessToken,
         MinimalGHPerson(user.login, user.avatar_url).sessionTuple

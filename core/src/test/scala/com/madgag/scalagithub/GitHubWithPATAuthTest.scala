@@ -36,8 +36,8 @@ object GitHubWithPATAuthTest extends IOSuite with OptionValues {
     httpBackend <- HttpClientCatsBackend.resource[IO]()
     dispatcher <- Dispatcher.parallel[IO]
     githubFactory <- GitHub.Factory()
-    client <- Resource.eval(githubFactory.clientFor(GitHubCredentials.Provider.fromStatic(AccessToken(sys.env("PLAY_GIT_HUB_TEST_GITHUB_ACCESS_TOKEN")))))
-  } yield client
+    clientWithContext <- Resource.eval(githubFactory.accessWithUserToken(AccessToken(sys.env("PLAY_GIT_HUB_TEST_GITHUB_ACCESS_TOKEN"))))
+  } yield clientWithContext.gitHub
 
   test("get a decent rate limit") {
     _.checkRateLimit().map { rl =>

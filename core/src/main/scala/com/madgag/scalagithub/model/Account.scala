@@ -16,39 +16,3 @@
 
 package com.madgag.scalagithub.model
 
-import com.madgag.scalagithub.GitHub
-import com.madgag.scalagithub.GitHub.{FR, ListStream}
-import com.madgag.scalagithub.commands.CreateRepo
-import org.apache.pekko.NotUsed
-import org.apache.pekko.stream.scaladsl.Source
-import play.api.libs.json.Reads
-import sttp.model.*
-import sttp.model.Uri.*
-
-import java.time.ZonedDateTime
-import scala.concurrent.ExecutionContext as EC
-
-trait Account {
-  type Self <: Account
-
-  val login: String
-  val id: Long
-  val url: String
-  val avatar_url: String
-  val name: Option[String]
-  val created_at: Option[ZonedDateTime]
-
-  val atLogin = s"@$login"
-
-  lazy val displayName: String = name.filter(_.nonEmpty).getOrElse(atLogin)
-
-  def reFetch()(using g: GitHub, ec: EC, ev: Reads[Self]): FR[Self]  = g.gitHubHttp.getAndCache[Self](Uri.unsafeParse(url))
-
-  def createRepo(cr: CreateRepo)(using g: GitHub): FR[Repo]
-
-  def listRepos(queryParams: (String, String)*)(using g: GitHub): ListStream[Repo]
-}
-
-object Account {
-  given Reads[Account] = Org.given_Reads_Org.widen[Account].orElse(User.given_Reads_User.widen[Account])
-}

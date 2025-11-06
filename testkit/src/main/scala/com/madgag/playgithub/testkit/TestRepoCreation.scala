@@ -27,7 +27,7 @@ import com.madgag.scalagithub
 import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.commands.CreateRepo
 import com.madgag.scalagithub.model.Repo
-import com.madgag.scalagithub.{AccountAccess, GitHub, GitHubCredentials, GitHubResponse, model}
+import com.madgag.scalagithub.{AccountAccess, ClientWithAccess, GitHub, GitHubCredentials, GitHubResponse, model}
 import com.madgag.time.Implicits.*
 import org.eclipse.jgit.api.{CloneCommand, Git}
 import org.eclipse.jgit.internal.storage.file.FileRepository
@@ -48,21 +48,19 @@ import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.*
 
 object TestRepoCreation {
-  def apply(installationAccess: InstallationAccess, testRepoNamePrefix: String): Resource[IO, TestRepoCreation] = for {
-    githubFactory <- GitHub.Factory()(using ExecutionContext.global)
-    accountAccess <- Resource.eval(installationAccess.accountAccess()(using githubFactory))
+  def apply(clientWithAccess: ClientWithAccess[_], testRepoNamePrefix: String): Resource[IO, TestRepoCreation] = for {
     testRepoCreation <- Resource.eval {
-      IO(new TestRepoCreation(accountAccess, testRepoNamePrefix)).flatTap(_.deleteTestRepos)
+      IO(new TestRepoCreation(clientWithAccess, testRepoNamePrefix)).flatTap(_.deleteTestRepos)
     }
   } yield testRepoCreation
 }
 
 class TestRepoCreation(
-  val testFixtureAccountAccess: AccountAccess,
+  val clientWithAccess: ClientWithAccess[_ <:AccountAccess],
   testRepoNamePrefix: String
 ) {
-  given credsProvider: GitHubCredentials.Provider = testFixtureAccountAccess.credentials
-  given gitHub: GitHub = testFixtureAccountAccess.gitHub
+  // given credsProvider: GitHubCredentials.Provider = testFixtureAccountAccess.credentials
+  given gitHub: GitHub = clientWithAccess.gitHub
 
   val retryPolicy: RetryPolicy[IO, Throwable] = limitRetriesByCumulativeDelay(30.seconds, fullJitter(1.seconds))
 
@@ -78,7 +76,7 @@ class TestRepoCreation(
     repo.name.startsWith(testRepoNamePrefix) && repo.created_at.toInstant.age() > ofMinutes(30)
 
   val listOldTestRepos: fs2.Stream[IO, Repo] =
-    testFixtureAccountAccess.account.listRepos("sort" -> "created", "direction" -> "asc").filter(isOldTestRepo)
+    clientWithAccess.accountAccess.focus.listRepos("sort" -> "created", "direction" -> "asc").filter(isOldTestRepo)
 
   val deleteTestRepos: IO[Map[Boolean, Set[Repo]]] = listOldTestRepos
     .parEvalMapUnordered(4)(repo => repo.delete().map(res => Map(res.result -> Set(repo)))).compile.foldMonoid
@@ -87,7 +85,7 @@ class TestRepoCreation(
   private def createBlankGitHubRepo(): IO[Repo] = for {
     now <- Clock[IO].realTimeInstant
     randInt <- Random[IO].nextIntBounded(1000000)
-    testRepoId <- testFixtureAccountAccess.account.createRepo(CreateRepo(
+    testRepoId <- clientWithAccess.accountAccess.focus.createRepo(CreateRepo(
       name = s"$testRepoNamePrefix-${now.getEpochSecond}-$randInt",
       `private` = false
     )).map(_.result.repoId)
@@ -100,7 +98,7 @@ class TestRepoCreation(
   }
 
   private def pushLocalRepoToGitHub(localGitRepo: FileRepository, testGithubRepo: Repo): IO[Unit] = for {
-    creds <- credsProvider
+    creds <- clientWithAccess.credentialsProvider
     _ <- configLocalRepoToPushToGitHubRepo(localGitRepo, testGithubRepo)
     pushResults <- pushLocalRepoToRemote(localGitRepo, creds)
   } yield require(pushResults.forall(_.getRemoteUpdates.asScala.forall(_.getStatus == RemoteRefUpdate.Status.OK)))
@@ -150,7 +148,7 @@ class TestRepoCreation(
     IO.println(s"retrying '$detail' - delay so far=${retryDetails.cumulativeDelay.toSeconds}s")
 
   private def performCloneOf(githubRepo: Repo): IO[Repository] = for {
-    creds <- credsProvider
+    creds <- clientWithAccess.credentialsProvider
     clonedRepo <- IO.blocking {
       creds.applyAuthTo[CloneCommand, Git](Git.cloneRepository()).setBare(true).setURI(githubRepo.clone_url)
         .setDirectory(createTempDirectory("test-repo").toFile).call().getRepository

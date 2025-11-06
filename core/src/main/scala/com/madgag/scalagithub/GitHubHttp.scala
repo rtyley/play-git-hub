@@ -88,6 +88,14 @@ class GitHubHttp(
 }
 
 object GitHubHttp {
+
+  def apply(
+    ghCredentials: GitHubCredentials.Provider,
+    httpClient: Backend[IO],
+    dispatcher: Dispatcher[IO]
+  )(using parsingEC: EC): IO[GitHubHttp] = for {
+    fetchCountRef <- cats.effect.kernel.Ref[IO].of(0L)
+  } yield new GitHubHttp(ghCredentials, httpClient, dispatcher, fetchCountRef)
   
   val PermanentHeaders: Seq[Header] = Seq(
     Header("Accept", "application/vnd.github+json"),
