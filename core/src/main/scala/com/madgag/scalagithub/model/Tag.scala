@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Roberto Tyley
+ * Copyright 2015 Roberto Tyley
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,29 @@
  * limitations under the License.
  */
 
-package com.madgag.github.apps
+package com.madgag.scalagithub.model
 
-import cats.effect.IO
-import com.madgag.github.{AccessToken, Expirable}
+import com.madgag.scalagithub.*
+import org.eclipse.jgit.lib.ObjectId
+import play.api.libs.json.{Json, OWrites, Reads}
 
-import scala.concurrent.{ExecutionContext, Future}
+case class Tag(
+  tag: String,
+  sha: ObjectId,
+  message: String
+)
 
-class InstallationAccessTokenProvider(
-  githubAppAuth: GitHubAppAuth,
-  installationId: Long
-) extends (() => IO[Expirable[AccessToken]]) {
+object Tag {
+  case class Create(
+    tag: String,
+    message: String,
+    `object`: ObjectId,
+    `type`: String
+  )
+  
+  object Create {
+    given OWrites[Create] = Json.writes
+  }
 
-  override def apply(): IO[Expirable[AccessToken]] =
-    githubAppAuth.getInstallationAccessToken(installationId).map(resp => Expirable(resp.token, resp.expires_at))
-
+  given Reads[Tag] = Json.reads
 }

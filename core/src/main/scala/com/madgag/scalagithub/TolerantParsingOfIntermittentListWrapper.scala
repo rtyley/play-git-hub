@@ -16,12 +16,17 @@
 
 package com.madgag.scalagithub
 
-import com.madgag.scalagithub.GitHubCredentials.Provider
-import com.madgag.scalagithub.model.Account
+import play.api.libs.json.*
 
-case class AccountCredentials(
-  account: Account,
-  credentials: Provider
-) {
-  val gitHub = new GitHub(credentials)
+object TolerantParsingOfIntermittentListWrapper {
+
+  val ListWithoutSingleEntryError = JsonValidationError("wrapper.list.does.not.contain.a.single.entry")
+
+  def tolerantlyParse[T : Reads](json: JsValue): JsResult[T] = {
+    json.validate[T].recoverWith { jsError =>
+      json.validate[Seq[T]].collect(ListWithoutSingleEntryError) {
+        case singleEntry :: Nil => singleEntry
+      }.recoverWith(_ => jsError)
+    }
+  }
 }

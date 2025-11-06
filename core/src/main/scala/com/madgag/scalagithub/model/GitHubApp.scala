@@ -16,18 +16,3 @@
 
 package com.madgag.scalagithub.model
 
-import play.api.libs.json.{Json, Reads}
-
-import java.time.ZonedDateTime
-
-case class GitHubApp(
-  slug: String,
-  id: Long,
-  html_url: String,
-  name: Option[String] = None,
-  created_at: Option[ZonedDateTime] = None
-)
-
-object GitHubApp {
-  implicit val readsGitHubApp: Reads[GitHubApp] = Json.reads[GitHubApp]
-}

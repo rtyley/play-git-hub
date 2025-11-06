@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Roberto Tyley
+ * Copyright 2025 Roberto Tyley
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,83 +16,143 @@
 
 package com.madgag.playgithub.testkit
 
-import com.madgag.git.RichRepo
+import cats.*
+import cats.effect.std.Random
+import cats.effect.{Clock, IO, Resource}
+import cats.implicits.*
+import com.madgag.git.*
 import com.madgag.git.test.unpackRepo
-import com.madgag.github.Implicits._
-import com.madgag.scalagithub.GitHub
-import com.madgag.scalagithub.GitHubCredentials.Provider
+import com.madgag.github.apps.InstallationAccess
+import com.madgag.scalagithub
+import com.madgag.scalagithub.GitHub.FR
 import com.madgag.scalagithub.commands.CreateRepo
-import com.madgag.scalagithub.model.{Account, Repo}
-import com.madgag.time.Implicits._
-import org.apache.pekko.actor.ActorSystem
+import com.madgag.scalagithub.model.Repo
+import com.madgag.scalagithub.{AccountAccess, ClientWithAccess, GitHub, GitHubCredentials, GitHubResponse, model}
+import com.madgag.time.Implicits.*
 import org.eclipse.jgit.api.{CloneCommand, Git}
-import org.eclipse.jgit.transport.RemoteRefUpdate
-import org.scalatest.Inspectors.forAll
-import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatest.matchers.should.Matchers._
+import org.eclipse.jgit.internal.storage.file.FileRepository
+import org.eclipse.jgit.lib.*
+import org.eclipse.jgit.lib.Constants.HEAD
+import org.eclipse.jgit.transport.{PushResult, RemoteRefUpdate}
+import retry.*
+import retry.ResultHandler.retryOnAllErrors
+import retry.RetryPolicies.{fullJitter, limitRetriesByCumulativeDelay}
+import retry.syntax.*
 
 import java.nio.file.Files.createTempDirectory
+import java.nio.file.Path
+import java.time.Duration
 import java.time.Duration.ofMinutes
-import scala.concurrent.{ExecutionContext, Future}
-import scala.jdk.CollectionConverters._
+import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.DurationInt
+import scala.jdk.CollectionConverters.*
 
-trait TestRepoCreation extends Eventually with ScalaFutures {
+object TestRepoCreation {
+  def apply(clientWithAccess: ClientWithAccess[_], testRepoNamePrefix: String): Resource[IO, TestRepoCreation] = for {
+    testRepoCreation <- Resource.eval {
+      IO(new TestRepoCreation(clientWithAccess, testRepoNamePrefix)).flatTap(_.deleteTestRepos)
+    }
+  } yield testRepoCreation
+}
 
-  val testRepoNamePrefix: String
-  val testFixturesAccount: Account
-  val testFixturesCredentials: Provider
+class TestRepoCreation(
+  val clientWithAccess: ClientWithAccess[_ <:AccountAccess],
+  testRepoNamePrefix: String
+) {
+  // given credsProvider: GitHubCredentials.Provider = testFixtureAccountAccess.credentials
+  given gitHub: GitHub = clientWithAccess.gitHub
 
-  implicit lazy val github: GitHub = new GitHub(testFixturesCredentials)
-  implicit val actorSystem: ActorSystem
+  val retryPolicy: RetryPolicy[IO, Throwable] = limitRetriesByCumulativeDelay(30.seconds, fullJitter(1.seconds))
+
+  def createTestRepo(path: Path): IO[Repo] = for {
+    localGitRepo <- IO.blocking(unpackRepo(path))
+    testGithubRepo <- createBlankGitHubRepo()
+    _ <- pushLocalRepoToGitHub(localGitRepo, testGithubRepo) >>
+      IO.sleep(1500.milli) >> // pause to allow the GitHub API to catch up - reduces retries
+      validateGitHubAPISuccessfullyRepresentsLocalRepo(testGithubRepo, localGitRepo.getRefDatabase)
+  } yield testGithubRepo
 
   def isOldTestRepo(repo: Repo): Boolean =
     repo.name.startsWith(testRepoNamePrefix) && repo.created_at.toInstant.age() > ofMinutes(30)
 
-  def deleteTestRepos()(implicit ec: ExecutionContext): Future[Unit] = for {
-    oldRepos <- testFixturesAccount.listRepos().all()
-    _ <- Future.traverse(oldRepos.filter(isOldTestRepo))(_.delete())
-  } yield ()
+  val listOldTestRepos: fs2.Stream[IO, Repo] =
+    clientWithAccess.accountAccess.focus.listRepos("sort" -> "created", "direction" -> "asc").filter(isOldTestRepo)
 
-  def createTestRepo(fileName: String)(implicit ec: ExecutionContext): Repo = {
-    val cr = CreateRepo(
-      name = testRepoNamePrefix + System.currentTimeMillis().toString,
+  val deleteTestRepos: IO[Map[Boolean, Set[Repo]]] = listOldTestRepos
+    .parEvalMapUnordered(4)(repo => repo.delete().map(res => Map(res.result -> Set(repo)))).compile.foldMonoid
+
+
+  private def createBlankGitHubRepo(): IO[Repo] = for {
+    now <- Clock[IO].realTimeInstant
+    randInt <- Random[IO].nextIntBounded(1000000)
+    testRepoId <- clientWithAccess.accountAccess.focus.createRepo(CreateRepo(
+      name = s"$testRepoNamePrefix-${now.getEpochSecond}-$randInt",
       `private` = false
-    )
+    )).map(_.result.repoId)
+    testGithubRepo <- gitHub.getRepo(testRepoId)
+  } yield {
 
-    val testRepoId = testFixturesAccount.createRepo(cr).futureValue.repoId
+    val repo = testGithubRepo.result
+    println(s"Created repo: ${repo.url}")
+    repo
+  }
 
-    val localGitRepo = unpackRepo(fileName)
+  private def pushLocalRepoToGitHub(localGitRepo: FileRepository, testGithubRepo: Repo): IO[Unit] = for {
+    creds <- clientWithAccess.credentialsProvider
+    _ <- configLocalRepoToPushToGitHubRepo(localGitRepo, testGithubRepo)
+    pushResults <- pushLocalRepoToRemote(localGitRepo, creds)
+  } yield require(pushResults.forall(_.getRemoteUpdates.asScala.forall(_.getStatus == RemoteRefUpdate.Status.OK)))
 
-    val testGithubRepo = eventually { github.getRepo(testRepoId).futureValue }
+  private def pushLocalRepoToRemote(localGitRepo: FileRepository, creds: GitHubCredentials): IO[Seq[PushResult]] = IO.blocking {
+    localGitRepo.git.push.setCredentialsProvider(creds.git).setPushTags().setPushAll().call()
+  }.map(_.asScala.toSeq)
 
+  private def configLocalRepoToPushToGitHubRepo(localGitRepo: FileRepository, testGithubRepo: Repo): IO[Unit] = IO.blocking {
     val config = localGitRepo.getConfig
     config.setString("remote", "origin", "url", testGithubRepo.clone_url)
     config.save()
 
     val defaultBranchName = testGithubRepo.default_branch
     if (Option(localGitRepo.findRef(defaultBranchName)).isEmpty) {
-      println(s"Going to create a '$defaultBranchName' branch")
+      // println(s"Creating a '$defaultBranchName' branch to correspond to the one in ${testGithubRepo.url}")
       localGitRepo.git.branchCreate().setName(defaultBranchName).setStartPoint("HEAD").call()
     }
-
-    val creds = testFixturesCredentials().futureValue
-    val pushResults =
-      localGitRepo.git.push.setCredentialsProvider(creds.git).setPushTags().setPushAll().call()
-
-    forAll (pushResults.asScala) { pushResult =>
-      all (pushResult.getRemoteUpdates.asScala.map(_.getStatus)) shouldBe RemoteRefUpdate.Status.OK
-    }
-
-    eventually {
-      whenReady(testGithubRepo.refs.list().all()) { _ should not be empty }
-    }
-
-    val clonedRepo = eventually {
-      creds.applyAuthTo[CloneCommand, Git](Git.cloneRepository()).setBare(true).setURI(testGithubRepo.clone_url)
-        .setDirectory(createTempDirectory("test-repo").toFile).call()
-    }
-    require(clonedRepo.getRepository.findRef(defaultBranchName).getObjectId == localGitRepo.resolve("HEAD"))
-
-    testGithubRepo
   }
+
+  private def validateGitHubAPISuccessfullyRepresentsLocalRepo(
+    testGithubRepo: Repo, expectedRefs: RefDatabase
+  ): IO[Unit] = for {
+    _ <- validateGitHubAPIGives(expectedRefs, testGithubRepo)
+    _ <- validateGitHubRepoCanBeSuccessfullyLocallyCloned(expectedRefs, testGithubRepo)
+  } yield ()
+
+  private def validateGitHubAPIGives(expectedRefs: RefDatabase, testGitHubRepo: Repo) =
+    expectedRefs.branchRefs.parTraverse { branchRef =>
+      getRefDataFromGitHubApi(testGitHubRepo, branchRef).map(_.result.objectId).map { a =>
+        require(a.toObjectId == branchRef.getObjectId, s"${a.toObjectId} IS NOT ${branchRef.getObjectId}")
+      }
+    }
+
+  private def validateGitHubRepoCanBeSuccessfullyLocallyCloned(expectedRefs: RefDatabase, testGithubRepo: Repo) = for {
+    localCloneOfGitHubRepo <- performCloneOf(testGithubRepo)
+  } yield {
+    val actualId: ObjectId = localCloneOfGitHubRepo.findRef(testGithubRepo.default_branch).getObjectId
+    val expectedId: ObjectId = expectedRefs.exactRef(HEAD).getObjectId
+    require(actualId == expectedId, s"actualId=$actualId expectedId=$expectedId")
+  }
+
+  private def getRefDataFromGitHubApi(testGithubRepo: Repo, branchRef: Ref)(using GitHub): FR[model.Ref] =
+    testGithubRepo.refs.get(branchRef): IO[GitHubResponse[model.Ref]]
+  .retryingOnErrors(retryPolicy, retryOnAllErrors(logRetry(s"get ${branchRef.getName}")))
+
+  private def logRetry(detail: String): (Throwable, RetryDetails) => IO[Unit] = (_, retryDetails) =>
+    IO.println(s"retrying '$detail' - delay so far=${retryDetails.cumulativeDelay.toSeconds}s")
+
+  private def performCloneOf(githubRepo: Repo): IO[Repository] = for {
+    creds <- clientWithAccess.credentialsProvider
+    clonedRepo <- IO.blocking {
+      creds.applyAuthTo[CloneCommand, Git](Git.cloneRepository()).setBare(true).setURI(githubRepo.clone_url)
+        .setDirectory(createTempDirectory("test-repo").toFile).call().getRepository
+    }.retryingOnErrors(retryPolicy, retryOnAllErrors(logRetry(s"clone ${githubRepo.clone_url}")))
+  } yield clonedRepo
 }

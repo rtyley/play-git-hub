@@ -16,23 +16,24 @@
 
 package com.madgag.scalagithub.model
 
-import com.madgag.git._
+import com.madgag.git.*
 import com.madgag.scalagithub.GitHub
-import com.madgag.scalagithub.GitHub.{FR, _}
+import com.madgag.scalagithub.GitHub.{FR, *}
 import com.madgag.scalagithub.commands.{CreateComment, CreateOrUpdateIssue, MergePullRequest}
 import com.madgag.scalagithub.model.Link.fromListUrl
 import com.madgag.scalagithub.model.PullRequest.CommitOverview
-import okhttp3.Request.Builder
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.revwalk.{RevCommit, RevWalk}
-import play.api.libs.json.Json._
+import play.api.libs.json.Json.*
 import play.api.libs.json.{Json, Reads}
+import sttp.model.*
+import sttp.model.Uri.*
 
 import java.time.ZonedDateTime
-import scala.concurrent.{ExecutionContext => EC}
-import Issue._
-import com.madgag.scalagithub._
-import okhttp3.HttpUrl
+import scala.concurrent.ExecutionContext as EC
+import Issue.*
+import com.madgag.scalagithub.*
+import sttp.model.Uri
 
 case class CommitPointer(
   ref: String,
@@ -68,21 +69,6 @@ trait HasLabels {
   // support add / remove ?
 }
 
-object PullRequestId {
-  def from(slug: String) = {
-    val parts = slug.split('/')
-    require(parts.length == 4)
-    require(parts(2) == "pull")
-
-    PullRequestId(RepoId(parts(0), parts(1)), parts(3).toInt)
-  }
-}
-
-
-case class PullRequestId(repo: RepoId, num: Int) {
-  lazy val slug = s"${repo.fullName}/pull/$num"
-}
-
 trait Createable {
   type Creation
 }
@@ -102,17 +88,17 @@ case class Issue(
 ) extends Commentable with HasLabels {
   val members = new CanList[User, String] with CanCheck[String] {
     override val link: Link[String] = Link.fromListUrl(s"$url/members")
-    override implicit val readsT: Reads[User] = User.readsUser
+    override implicit val readsT: Reads[User] = User.given_Reads_User
   }
 
   /**
    * https://docs.github.com/en/rest/issues/issues?apiVersion=2022-11-28#update-an-issue
    * PATCH /repos/{owner}/{repo}/issues/{issue_number}
    */
-  def update(update: CreateOrUpdateIssue)(implicit g: GitHub, ec: EC): FR[Issue] =
-    g.executeAndReadJson(_.url(url).patch(toJson(update)))
+  def update(createOrUpdate: CreateOrUpdateIssue)(using g: GitHub): FR[Issue] =
+    g.executeAndReadJson(reqWithBody(createOrUpdate).patch(Uri.unsafeParse(url)))
 
-  def close()(implicit g: GitHub, ec: EC): FR[Issue] = update(CreateOrUpdateIssue(state = Some("closed")))
+  def close()(using g: GitHub): FR[Issue] = update(CreateOrUpdateIssue(state = Some("closed")))
 }
 
 object Issue {
@@ -130,6 +116,7 @@ case class PullRequest(
   title: String,
   body: Option[String],
   created_at: ZonedDateTime,
+  updated_at: ZonedDateTime,
   merged: Option[Boolean], // not present on https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#list-pull-requests
   merged_at: Option[ZonedDateTime],
   merge_commit_sha: Option[ObjectId], // deprecated? https://developer.github.com/v3/pulls/#get-a-single-pull-request
@@ -144,7 +131,7 @@ case class PullRequest(
 ) extends Commentable with HasLabels {
   val baseRepo = base.repo.get // base repo is always available, unlike head repo which might be gone
 
-  val prId = PullRequestId(baseRepo.repoId, number)
+  val prId = PullRequest.Id(baseRepo.repoId, number)
 
   val mergeUrl = s"$url/merge"
 
@@ -154,8 +141,8 @@ case class PullRequest(
     * https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#merge-a-pull-request
     * PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge
     */
-  def merge(mergePullRequest: MergePullRequest)(implicit g: GitHub, ec: EC): FR[PullRequest.Merge] =
-    g.put(HttpUrl.get(mergeUrl), mergePullRequest)
+  def merge(mergePullRequest: MergePullRequest)(using g: GitHub): FR[PullRequest.Merge] =
+    g.put(Uri.unsafeParse(mergeUrl), mergePullRequest)
 
   /**
     * https://developer.github.com/v3/pulls/#list-commits-on-a-pull-request
@@ -177,6 +164,22 @@ case class PullRequest(
 }
 
 object PullRequest {
+
+  object Id {
+    def fromTrailingPathSegments(parts: Seq[String]): Id = {
+      require(parts.length == 4)
+      require(parts(2) == "pull")
+      Id(RepoId(parts(0), parts(1)), parts(3).toInt)
+    }
+
+    def from(slug: String): Id = fromTrailingPathSegments(slug.split('/'))
+
+    def from(httpUri: Uri): Id = fromTrailingPathSegments(httpUri.path.takeRight(4))
+  }
+
+  case class Id(repo: RepoId, num: Int) {
+    lazy val slug = s"${repo.fullName}/pull/$num" // Used in GitHub HTML UI urls, it does *not* match the REST API
+  }
 
   case class CommitOverview(
     url: String,

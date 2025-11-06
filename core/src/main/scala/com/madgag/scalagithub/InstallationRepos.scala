@@ -14,19 +14,16 @@
  * limitations under the License.
  */
 
-package com.madgag.github.apps
+package com.madgag.scalagithub
 
-import cats.effect.IO
-import com.madgag.github.{AccessToken, Expirable}
+import com.madgag.scalagithub.model.Repo
+import play.api.libs.json.{Json, Reads}
 
-import scala.concurrent.{ExecutionContext, Future}
+case class InstallationRepos(
+  total_count: Int,
+  repositories: Seq[Repo]
+)
 
-class InstallationAccessTokenProvider(
-  githubAppAuth: GitHubAppAuth,
-  installationId: Long
-) extends (() => IO[Expirable[AccessToken]]) {
-
-  override def apply(): IO[Expirable[AccessToken]] =
-    githubAppAuth.getInstallationAccessToken(installationId).map(resp => Expirable(resp.token, resp.expires_at))
-
+object InstallationRepos {
+  given Reads[InstallationRepos] = Json.reads
 }
