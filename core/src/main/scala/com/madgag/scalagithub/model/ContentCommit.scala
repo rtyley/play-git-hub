@@ -92,9 +92,16 @@ case class Commit(
 
 case class ContentCommit(content: Content, commit: Commit)
 
+case class DeletionCommit(commit: Commit)
+
+object Commit {
+  given Reads[Commit] = Json.reads[Commit]
+}
 
 object ContentCommit {
-  implicit val readsCommit: Reads[Commit] = Json.reads[Commit]
+  given Reads[ContentCommit] = Json.reads[ContentCommit]
+}
 
-  implicit val readsContentCommit: Reads[ContentCommit] = Json.reads[ContentCommit]
+object DeletionCommit {
+  given Reads[DeletionCommit] = Json.reads[DeletionCommit]
 }
