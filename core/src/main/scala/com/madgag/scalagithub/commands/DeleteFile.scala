@@ -16,26 +16,16 @@
 
 package com.madgag.scalagithub.commands
 
+import com.madgag.scalagithub.*
 import org.eclipse.jgit.lib.ObjectId
 import play.api.libs.json.{Json, OWrites}
-import com.madgag.scalagithub._
 
-/*
-{
-  "message": "my commit message",
-  "committer": {
-    "name": "Scott Chacon",
-    "email": "schacon@gmail.com"
-  },
-  "content": "bXkgbmV3IGZpbGUgY29udGVudHM="
-}
- */
-case class CreateFile(
+case class DeleteFile(
   message: String,
-  content: String,
+  sha: ObjectId,
   branch: Option[String] = None
 )
 
-object CreateFile {
-  implicit val writesCreateFile: OWrites[CreateFile] = Json.writes[CreateFile]
+object DeleteFile {
+  given OWrites[DeleteFile] = Json.writes
 }

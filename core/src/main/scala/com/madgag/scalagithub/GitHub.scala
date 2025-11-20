@@ -204,7 +204,7 @@ class GitHub(val gitHubHttp: GitHubHttp) {
     * https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28#create-or-update-file-contents
     * PUT /repos/{owner}/{repo}/contents/{path}
     */
-  def createFile(repo: Repo, path: String, createFile: CreateFile): FR[ContentCommit] =
+  def createFile(repo: Repo, path: String, createFile: CreateOrUpdateFile): FR[ContentCommit] =
     create(repo.contents.urlFor(path), createFile)
 
   /**

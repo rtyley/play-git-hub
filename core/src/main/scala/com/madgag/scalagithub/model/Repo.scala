@@ -16,18 +16,16 @@
 
 package com.madgag.scalagithub.model
 
+import com.madgag.scalagithub.GitHub
+import com.madgag.scalagithub.GitHub.{FR, ListStream, reqWithBody}
+import com.madgag.scalagithub.commands.*
+import org.eclipse.jgit
+import play.api.libs.json.{Json, Reads, Writes}
 import sttp.client4.*
 import sttp.model.Uri
-import com.madgag.scalagithub.GitHub
-import com.madgag.scalagithub.GitHub.{FR, ListStream}
-import com.madgag.scalagithub.commands.*
-import org.apache.pekko.NotUsed
-import org.apache.pekko.stream.scaladsl.Source
-import play.api.libs.json.{Json, Reads, Writes}
 
 import java.time.ZonedDateTime
 import scala.concurrent.ExecutionContext as EC
-import org.eclipse.jgit
 
 object RepoId {
   def from(fullName: String) = {
@@ -84,6 +82,9 @@ case class Repo(
 
   val trees2 = new Repo.Trees(trees)
 
+  // https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28#get-repository-content
+  val contentsFile = new Repo.Contents(contents)
+
   val refs = new RepoRefs(git_refs_url)
   // https://developer.github.com/v3/git/refs/#get-a-reference
   // https://developer.github.com/v3/git/refs/#create-a-reference
@@ -114,18 +115,6 @@ case class Repo(
 
   val hooks = new CReader[Hook, Int](Link.fromListUrl(hooks_url))
     with CanGetAndList[Hook, Int] // https://developer.github.com/v3/repos/hooks/#get-single-hook
-
-  val contents2 = new CanPut[ContentCommit, String, CreateFile] {
-    override val link: Link[String] = Link.fromSuffixedUrl(contents_url, "+path")
-    override implicit val writesCC: Writes[CreateFile] = CreateFile.writesCreateFile
-    override implicit val readsT: Reads[ContentCommit] = ContentCommit.readsContentCommit
-  }
-
-  // https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28#get-repository-content
-  val contentsFile = new CanGet[Content, String] {
-    override val link: Link[String] = Link.fromSuffixedUrl(contents_url, "+path")
-    override implicit val readsT: Reads[Content] = Content.readsContent
-  }
 
   val labels = new CCreator[Label, String, CreateLabel](Link.fromSuffixedUrl(labels_url, "/name"))
     with CanGetAndList[Label, String]
@@ -293,6 +282,26 @@ object Repo {
     def getRecursively(sha: String)(implicit g: GitHub): FR[Tree] =
       g.gitHubHttp.getAndCache(link.urlFor(sha).addParam("recursive", "1"))
 
+  }
+
+  class Contents(suppliedLink: Link[String]) extends CCreator[Content, String, CreateOrUpdateFile](suppliedLink) with CanGetAndCreate[Content, String, CreateOrUpdateFile] {
+
+    /**
+     * https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28#delete-a-file
+     *
+     * DELETE /repos/{owner}/{repo}/contents/{path}
+     */
+    def delete(filePath: String, deleteFile: DeleteFile)(using g: GitHub): FR[DeletionCommit] =
+      g.executeAndReadJson(reqWithBody(deleteFile).delete(link.urlFor(filePath)))
+
+
+    /**
+     * https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28#create-or-update-file-contents
+     *
+     * PUT /repos/{owner}/{repo}/contents/{path}
+     */
+    def createOrUpdate(filePath: String, createFile: CreateOrUpdateFile)(using g: GitHub): FR[ContentCommit] =
+      g.put(link.urlFor(filePath), createFile)
   }
 
   implicit val readsRepo: Reads[Repo] = Json.reads[Repo]
