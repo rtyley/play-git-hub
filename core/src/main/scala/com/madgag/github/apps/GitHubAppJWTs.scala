@@ -72,4 +72,6 @@ object GitHubAppJWTs {
 
     new GitHubAppJWTs(getValue("CLIENT_ID"), GitHubAppJWTs.parsePrivateKeyFrom(getValue("PRIVATE_KEY")).get)
   }
+
+  def fromEnvVars(prefix: String): GitHubAppJWTs = fromConfigMap(sys.env, prefix)
 }

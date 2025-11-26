@@ -88,11 +88,9 @@ class TestRepoCreation(
     testRepoId <- clientWithAccess.accountAccess.focus.createRepo(CreateRepo(
       name = s"$testRepoNamePrefix-${now.getEpochSecond}-$randInt",
       `private` = false
-    )).map(_.result.repoId)
-    testGithubRepo <- gitHub.getRepo(testRepoId)
+    )).map(_.repoId)
+    repo <- gitHub.getRepo(testRepoId)
   } yield {
-
-    val repo = testGithubRepo.result
     println(s"Created repo: ${repo.url}")
     repo
   }
@@ -128,7 +126,7 @@ class TestRepoCreation(
 
   private def validateGitHubAPIGives(expectedRefs: RefDatabase, testGitHubRepo: Repo) =
     expectedRefs.branchRefs.parTraverse { branchRef =>
-      getRefDataFromGitHubApi(testGitHubRepo, branchRef).map(_.result.objectId).map { a =>
+      getRefDataFromGitHubApi(testGitHubRepo, branchRef).map(_.objectId).map { a =>
         require(a.toObjectId == branchRef.getObjectId, s"${a.toObjectId} IS NOT ${branchRef.getObjectId}")
       }
     }

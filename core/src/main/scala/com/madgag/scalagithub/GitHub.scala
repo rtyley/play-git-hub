@@ -51,7 +51,7 @@ case class GitHubResponse[Result](
 }
 
 object GitHubResponse {
-  // implicit def toResult[Result](resp: GitHubResponse[Result]): Result = resp.result
+  implicit def toResult[Result](resp: GitHubResponse[Result]): Result = resp.result
 }
 
 object GitHub {
@@ -67,7 +67,7 @@ object GitHub {
       for {
         gitHub <- clientFor(credsProvider)
         user <- gitHub.getUser()
-      } yield new ClientWithAccess(gitHub, credsProvider, UserTokenAccess(user.result))
+      } yield new ClientWithAccess(gitHub, credsProvider, UserTokenAccess(user))
     }
 
     def accessSoleAppInstallation(gitHubAppJWTs: GitHubAppJWTs): IO[ClientWithAccess[GitHubAppAccess]] = {

@@ -38,19 +38,19 @@ object GitHubWithAppAuthTest extends IOSuite with OptionValues {
 
   test("make a request") {
     _.getUser("rtyley").map { user =>
-      expect(clue(user.result.name).exists(_.startsWith("Roberto")))
+      expect(clue(user.name).exists(_.startsWith("Roberto")))
     }
   }
 
   test("be able to get a public repo") {
     _.getRepo(RepoId("rtyley", "bfg-repo-cleaner")).map { repo =>
-      expect(clue(repo.result.id) == 7266492)
+      expect(clue(repo.id) == 7266492)
     }
   }
 
   test("get a public PR by id") { // https://github.com/rtyley/bfg-repo-cleaner/pull/527
     _.getPullRequest(PullRequest.Id(RepoId("rtyley", "bfg-repo-cleaner"), 527)).map { pr =>
-      expect(clue(pr.result.merged_by.value.login) == "rtyley")
+      expect(clue(pr.merged_by.value.login) == "rtyley")
     }
   }
 
@@ -58,9 +58,9 @@ object GitHubWithAppAuthTest extends IOSuite with OptionValues {
     given GitHub = appGitHub
     for {
       repo <- appGitHub.getRepo(RepoId("rtyley", "play-git-hub"))
-      repoPRs = repo.result.pullRequests
-      mergedPr <- repoPRs.get(2).map(_.result)
-      unmergedPr <- repoPRs.get(16).map(_.result)
+      repoPRs = repo.pullRequests
+      mergedPr <- repoPRs.get(2)
+      unmergedPr <- repoPRs.get(16)
     } yield {
       expect(clue(mergedPr.merged.value) == true) and
       expect(clue(mergedPr.merged_by.map(_.login)).contains("rtyley")) and
@@ -72,7 +72,7 @@ object GitHubWithAppAuthTest extends IOSuite with OptionValues {
   test("list PRs") { appGitHub =>
     given GitHub = appGitHub
     for {
-      repo <- appGitHub.getRepo(RepoId("rtyley", "play-git-hub")).map(_.result)
+      repo <- appGitHub.getRepo(RepoId("rtyley", "play-git-hub"))
       prs <- repo.pullRequests.list(Map("state" -> "closed")).compile.toList
     } yield expect(clue(prs.size) > 2)
   }

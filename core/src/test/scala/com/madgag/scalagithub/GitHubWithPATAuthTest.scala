@@ -45,7 +45,7 @@ object GitHubWithPATAuthTest extends IOSuite with OptionValues {
 
   test("get the authenticated user") {
     _.getUser().map { user =>
-      expect(clue(user.result.created_at).exists(_.toInstant < Instant.now()))
+      expect(clue(user.created_at).exists(_.toInstant < Instant.now()))
     }
   }
 }

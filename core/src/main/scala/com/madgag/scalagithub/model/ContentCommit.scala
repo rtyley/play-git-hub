@@ -17,8 +17,11 @@
 package com.madgag.scalagithub.model
 
 import org.eclipse.jgit.lib.ObjectId
-import play.api.libs.json.{Json, Reads}
-import com.madgag.scalagithub._
+import play.api.libs.json.{JsResult, JsValue, Json, Reads}
+import com.madgag.scalagithub.*
+import com.madgag.scalagithub.GitHub.{FR, reqWithBody}
+import com.madgag.scalagithub.commands.DeleteFile
+import sttp.model.Uri
 
 /*
 {
@@ -73,14 +76,19 @@ case class Content(
   path: String,
   sha: ObjectId,
   size: Long,
-  url: String,
-  html_url: String,
-  download_url: String,
+  url: Uri,
+  html_url: Uri,
+  download_url: Uri,
   `type`: String
-)
+) {
+  def delete(message: String, branch: Option[String] = None)(using g: GitHub): FR[DeletionCommit] =
+    g.executeAndReadJson(reqWithBody(DeleteFile(message, sha, branch)).delete(url))
+}
+
+given Reads[Uri] = Reads.JsStringReads.map(s => Uri.unsafeParse(s.value))
 
 object Content {
-  implicit val readsContent: Reads[Content] = Json.reads[Content]
+  given Reads[Content] = Json.reads
 }
 
 case class Commit(

@@ -50,9 +50,9 @@ object GitHubWithTestRepoTest extends IOSuite with OptionValues {
         repo <- testRepoCreation.createTestRepo(pathForResource("/small-example.git.zip", getClass))
         _ <- repo.contentsFile.createOrUpdate(testFile, CreateOrUpdateFile("My creation message", Base64EncodedBytes(fileContent)))
         content <- repo.contentsFile.get(testFile)
-        deleteCommit <- repo.contentsFile.delete(testFile, DeleteFile("My deletion message", content.result.sha))
+        deleteCommit <- content.delete("My deletion message") // repo.contentsFile.delete(testFile, DeleteFile("My deletion message", content.result.sha))
       } yield {
-        expect(clue(content.result.size) == fileContent.length) and expect(clue(deleteCommit.result.commit.message) == "My deletion message")
+        expect(clue(content.size) == fileContent.length) and expect(clue(deleteCommit.commit.message) == "My deletion message")
       }
     }
   }
