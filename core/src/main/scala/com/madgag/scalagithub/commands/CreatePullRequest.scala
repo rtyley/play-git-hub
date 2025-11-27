@@ -22,6 +22,7 @@ case class CreatePullRequest(
   title: String,
   head: String,
   base: String,
+  // labels: Seq[String], // Does not work (checked 2025). Supported on issue-creation, but not on PR creation
   body: Option[String] = None
 )
 

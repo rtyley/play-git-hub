@@ -16,12 +16,13 @@
 
 package com.madgag.scalagithub.model
 
+import cats.data.NonEmptyList
 import cats.effect.IO
 import com.madgag.git.Branch
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.{FR, ListStream, reqWithBody}
 import com.madgag.scalagithub.commands.*
-import com.madgag.scalagithub.model.PullRequest.BranchSpec
+import com.madgag.scalagithub.model.PullRequest.{BranchSpec, Metadata}
 import com.madgag.scalagithub.model.Repo.PullRequests.{BranchAccess, SingleCommitAction}
 import org.eclipse.jgit
 import play.api.libs.json.{Json, Reads, Writes}
@@ -111,7 +112,7 @@ case class Repo(
 
   val teams = new CanList[Repo.Team, Int] {
     override val link: Link[Int] = Link.fromListUrl(teams_url)
-    override implicit val readsT: Reads[Repo.Team] = Repo.Team.readsTeam
+    override implicit val readsT: Reads[Repo.Team] = Repo.Team.given_Reads_Team
   }
 
   val hooks = new CReader[Hook, Int](Link.fromListUrl(hooks_url))
@@ -159,7 +160,7 @@ trait CanCreate[T, ID, CC] extends Writer[T, CC] {
 
   val link: Link[ID]
 
-  def create(cc: CC)(using g: GitHub): FR[T] = g.create(Uri.unsafeParse(link.listUrl), cc)
+  def create(cc: CC)(using g: GitHub): FR[T] = g.post(Uri.unsafeParse(link.listUrl), cc)
 }
 
 trait CanPut[T, ID, CC] extends Writer[T, CC] {
@@ -201,16 +202,21 @@ trait CanDelete[ID] {
     g.executeAndCheck(quickRequest.delete(link.urlFor(id)))
 }
 
-trait CanReplace[T, ID] extends Reader[T] {
+trait CanAddOrReplace[T, ID] extends Reader[T] {
 
   val link: Link[ID]
+  private val uri = Uri.unsafeParse(link.listUrl)
+  /**
+   * [[https://docs.github.com/en/rest/issues/labels?apiVersion=2022-11-28#add-labels-to-an-issue]]
+   * POST /repos/{owner}/{repo}/issues/{issue_number}/labels
+   */
+  def add(ids: Seq[ID])(using g: GitHub, w: Writes[ID]): FR[Seq[T]] = g.post(uri, ids)
 
   /**
-   * Eg
-   * https://docs.github.com/en/rest/issues/labels?apiVersion=2022-11-28#set-labels-for-an-issue
+   * [[https://docs.github.com/en/rest/issues/labels?apiVersion=2022-11-28#set-labels-for-an-issue]]
+   * PUT /repos/{owner}/{repo}/issues/{issue_number}/labels
    */
-  def replace(ids: Seq[ID])(implicit g: GitHub, ec: EC, w: Writes[ID]): FR[Seq[T]] =
-    g.put(Uri.unsafeParse(link.listUrl), ids)
+  def replace(ids: Seq[ID])(using g: GitHub, w: Writes[ID]): FR[Seq[T]] = g.put(uri, ids)
 }
 
 trait Link[P] {
@@ -273,7 +279,7 @@ object Repo {
   }
 
   object Team {
-    implicit val readsTeam: Reads[Team] = Json.reads[Team]
+    given Reads[Team] = Json.reads
   }
 
   class Trees(suppliedLink: Link[String]) extends CCreator[Tree, String, CreateTree](suppliedLink) with CanGetAndCreate[Tree, String, CreateTree] {
@@ -292,22 +298,23 @@ object Repo {
   class PullRequests(repo: Repo, suppliedLink: Link[Int]) extends CCreator[PullRequest, Int, CreatePullRequest](suppliedLink)
     with CanGetAndList[PullRequest, Int] {
 
-    def create(branchSpec: BranchSpec, text: PullRequest.Text, construct: BranchAccess => IO[Commit])(using GitHub): IO[PullRequest] = {
-      val base = branchSpec.base.getOrElse(repo.default_branch)
+    def create(metadata: PullRequest.Metadata, construct: BranchAccess => IO[Commit])(using GitHub): IO[PullRequest] = {
+      val base = metadata.branchSpec.base.getOrElse(repo.default_branch)
       for {
         baseBranchRef <- repo.refs.get(s"heads/$base")
         mainBranchCommitId = baseBranchRef.objectId
-        prBranch <- repo.refs.create(CreateRef(ref = branchSpec.head.ref, mainBranchCommitId))
-        finalCommit <- construct(BranchAccess(repo, branchSpec.head))
-        pr <- create(CreatePullRequest(text.title, head = branchSpec.head.name, base = base, body = text.body))
+        prBranch <- repo.refs.create(CreateRef(ref = metadata.branchSpec.head.ref, mainBranchCommitId))
+        finalCommit <- construct(BranchAccess(repo, metadata.branchSpec.head))
+        pr <- create(CreatePullRequest(metadata.text.title, head = metadata.branchSpec.head.name, base = base, body = metadata.text.body))
+        addLabels <- IO.whenA(metadata.labels.nonEmpty)(pr.labels.add(metadata.labels.toSeq).void)
       } yield pr
     }
 
-    def create(branchSpec: BranchSpec, text: PullRequest.Text, singleCommitAction: SingleCommitAction)(using GitHub): IO[PullRequest] =
-      create(branchSpec, text, ba => singleCommitAction.execute(ba, text.asCommitMessage).map(_.commit))
+    def create(metadata: PullRequest.Metadata, singleCommitAction: SingleCommitAction)(using GitHub): IO[PullRequest] =
+      create(metadata, ba => singleCommitAction.execute(ba, metadata.text.asCommitMessage).map(_.commit))
 
-    def create(branch: String, text: PullRequest.Text, singleCommitAction: SingleCommitAction)(using GitHub): IO[PullRequest] =
-      create(BranchSpec(Branch(branch)), text, singleCommitAction)
+    def create(text: PullRequest.Text, branch: String, labels: Set[String] = Set.empty)(singleCommitAction: SingleCommitAction)(using GitHub): IO[PullRequest] =
+      create(Metadata(text, BranchSpec(Branch(branch)), labels), ba => singleCommitAction.execute(ba, text.asCommitMessage).map(_.commit))
   }
 
   object PullRequests {
