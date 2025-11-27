@@ -16,9 +16,13 @@
 
 package com.madgag.scalagithub.model
 
+import cats.effect.IO
+import com.madgag.git.Branch
 import com.madgag.scalagithub.GitHub
 import com.madgag.scalagithub.GitHub.{FR, ListStream, reqWithBody}
 import com.madgag.scalagithub.commands.*
+import com.madgag.scalagithub.model.PullRequest.BranchSpec
+import com.madgag.scalagithub.model.Repo.PullRequests.{BranchAccess, SingleCommitAction}
 import org.eclipse.jgit
 import play.api.libs.json.{Json, Reads, Writes}
 import sttp.client4.*
@@ -92,10 +96,7 @@ case class Repo(
   val tags = new CCreator[Tag, String, Tag.Create](Link.fromSuffixedUrl[String](git_tags_url, "/sha"))
     with CanGet[Tag, String]
 
-  val pullRequests = new CCreator[PullRequest, Int, CreatePullRequest](Link.fromSuffixedUrl(pulls_url, "/number"))
-    with CanGetAndList[PullRequest, Int]
-  // https://developer.github.com/v3/pulls/#create-a-pull-request
-  // https://developer.github.com/v3/pulls/#get-a-single-pull-request
+  val pullRequests = new Repo.PullRequests(this, Link.fromSuffixedUrl(pulls_url, "/number"))
 
   val issues = new CCreator[Issue, Int, CreateOrUpdateIssue](Link.fromSuffixedUrl(issues_url, "/number"))
     with CanGetAndList[Issue, Int]
@@ -180,7 +181,8 @@ trait CanGet[T, ID] extends Reader[T] {
 
   val link: Link[ID]
 
-  def get(id: ID)(using g: GitHub): FR[T] = g.gitHubHttp.getAndCache[T](link.urlFor(id))
+  def get(id: ID, queryParams: Map[String, String] = Map.empty)(using g: GitHub): FR[T] =
+    g.gitHubHttp.getAndCache[T](link.urlFor(id).addParams(queryParams.toSeq*))
 }
 
 trait CanCheck[ID] {
@@ -281,7 +283,50 @@ object Repo {
 
     def getRecursively(sha: String)(implicit g: GitHub): FR[Tree] =
       g.gitHubHttp.getAndCache(link.urlFor(sha).addParam("recursive", "1"))
+  }
 
+  /**
+   * https://developer.github.com/v3/pulls/#create-a-pull-request
+   * https://developer.github.com/v3/pulls/#get-a-single-pull-request
+   */
+  class PullRequests(repo: Repo, suppliedLink: Link[Int]) extends CCreator[PullRequest, Int, CreatePullRequest](suppliedLink)
+    with CanGetAndList[PullRequest, Int] {
+
+    def create(branchSpec: BranchSpec, text: PullRequest.Text, construct: BranchAccess => IO[Commit])(using GitHub): IO[PullRequest] = {
+      val base = branchSpec.base.getOrElse(repo.default_branch)
+      for {
+        baseBranchRef <- repo.refs.get(s"heads/$base")
+        mainBranchCommitId = baseBranchRef.objectId
+        prBranch <- repo.refs.create(CreateRef(ref = branchSpec.head.ref, mainBranchCommitId))
+        finalCommit <- construct(BranchAccess(repo, branchSpec.head))
+        pr <- create(CreatePullRequest(text.title, head = branchSpec.head.name, base = base, body = text.body))
+      } yield pr
+    }
+
+    def create(branchSpec: BranchSpec, text: PullRequest.Text, singleCommitAction: SingleCommitAction)(using GitHub): IO[PullRequest] =
+      create(branchSpec, text, ba => singleCommitAction.execute(ba, text.asCommitMessage).map(_.commit))
+
+    def create(branch: String, text: PullRequest.Text, singleCommitAction: SingleCommitAction)(using GitHub): IO[PullRequest] =
+      create(BranchSpec(Branch(branch)), text, singleCommitAction)
+  }
+
+  object PullRequests {
+    class BranchAccess(val repo: Repo, val branch: Branch)(using g: GitHub) {
+      def get(filePath: String): FR[Content] = repo.contentsFile.get(filePath, Map("ref" -> branch.ref))
+
+      // Single commit change?
+      def delete(filePath: String, commitMessage: String): FR[DeletionCommit] =
+        get(filePath).flatMap(_.delete(commitMessage, branch = Some(branch.name)))
+    }
+
+    trait SingleCommitAction {
+      def execute(branchAccess: BranchAccess, commitMessage: String): IO[DeletionCommit]
+    }
+
+    object SingleCommitAction {
+      def deleteFile(path: String): SingleCommitAction =
+        (branchAccess: BranchAccess, commitMessage: String) => branchAccess.delete(path, commitMessage).map(_.result)
+    }
   }
 
   class Contents(suppliedLink: Link[String]) extends CCreator[Content, String, CreateOrUpdateFile](suppliedLink) with CanGetAndCreate[Content, String, CreateOrUpdateFile] {

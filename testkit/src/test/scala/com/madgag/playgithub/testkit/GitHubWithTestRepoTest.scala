@@ -19,10 +19,14 @@ package com.madgag.playgithub.testkit
 import cats.*
 import cats.effect.*
 import cats.effect.std.Dispatcher
+import com.madgag.git.Branch
 import com.madgag.git.test.pathForResource
 import com.madgag.github.AccessToken
 import com.madgag.github.apps.{GitHubAppAuth, GitHubAppJWTs, InstallationAccess}
 import com.madgag.scalagithub.commands.{Base64EncodedBytes, CreateOrUpdateFile, DeleteFile}
+import com.madgag.scalagithub.model.PullRequest
+import com.madgag.scalagithub.model.PullRequest.BranchSpec
+import com.madgag.scalagithub.model.Repo.PullRequests.SingleCommitAction.deleteFile
 import com.madgag.scalagithub.{ClientWithAccess, GitHub, GitHubAppAccess}
 import org.scalatest.OptionValues
 import sttp.client4.httpclient.cats.HttpClientCatsBackend
@@ -54,6 +58,17 @@ object GitHubWithTestRepoTest extends IOSuite with OptionValues {
       } yield {
         expect(clue(content.size) == fileContent.length) and expect(clue(deleteCommit.commit.message) == "My deletion message")
       }
+    }
+  }
+
+  test("create a PR") { installationAccess =>
+    TestRepoCreation(installationAccess, "test-creating-a-pr").use { testRepoCreation =>
+      given GitHub = testRepoCreation.gitHub
+      val prText = PullRequest.Text("My title", "My description")
+      for {
+        repo <- testRepoCreation.createTestRepo(pathForResource("/small-example.git.zip", getClass))
+        pr <- repo.pullRequests.create(branch = "my-branch", prText, deleteFile("foo"))
+      } yield expect(clue(pr.text) == prText) //
     }
   }
 }
