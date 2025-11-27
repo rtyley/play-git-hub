@@ -137,6 +137,8 @@ case class PullRequest(
 
   lazy val compareUrl = baseRepo.compareUrl(base.sha.name(), head.sha.name())
 
+  lazy val text: PullRequest.Text = PullRequest.Text(title, body)
+
   /**
     * https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#merge-a-pull-request
     * PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge
@@ -181,6 +183,20 @@ object PullRequest {
     lazy val slug = s"${repo.fullName}/pull/$num" // Used in GitHub HTML UI urls, it does *not* match the REST API
   }
 
+  case class BranchSpec(head: Branch, base: Option[String] = None)
+
+  object BranchSpec {
+
+  }
+
+  case class Text(title: String, body: Option[String]) {
+    lazy val asCommitMessage: String = (Seq(title) ++ body).mkString("\n\n")
+  }
+
+  object Text {
+    def apply(title: String, body: String): Text = Text(title, Some(body))
+  }
+
   case class CommitOverview(
     url: String,
     sha: ObjectId,
@@ -200,12 +216,12 @@ object PullRequest {
       val subject: String = message.linesIterator.next()
     }
 
-    implicit val readsCommitOverview: Reads[CommitOverview] = Json.reads[CommitOverview]
+    given Reads[CommitOverview] = Json.reads[CommitOverview]
 
     implicit def overview2commit(co: CommitOverview):Commit = co.commit
 
     object Commit {
-      implicit val readsCommit: Reads[Commit] = Json.reads[Commit]
+      given Reads[Commit] = Json.reads
     }
   }
 
