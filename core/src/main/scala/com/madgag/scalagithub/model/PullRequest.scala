@@ -65,7 +65,7 @@ trait HasLabels {
   // You can't 'get' a label for an Issue - the label is 'got' from a Repo
   val labels = new CReader[Label, String](fromListUrl(s"$issue_url/labels"))
     with CanList[Label, String]
-    with CanReplace[Label, String] // https://developer.github.com/v3/issues/labels/#replace-all-labels-for-an-issue
+    with CanAddOrReplace[Label, String] // https://developer.github.com/v3/issues/labels/#replace-all-labels-for-an-issue
   // support add / remove ?
 }
 
@@ -185,13 +185,11 @@ object PullRequest {
 
   case class BranchSpec(head: Branch, base: Option[String] = None)
 
-  object BranchSpec {
-
-  }
-
   case class Text(title: String, body: Option[String]) {
     lazy val asCommitMessage: String = (Seq(title) ++ body).mkString("\n\n")
   }
+  
+  case class Metadata(text: Text, branchSpec: BranchSpec, labels: Set[String])
 
   object Text {
     def apply(title: String, body: String): Text = Text(title, Some(body))

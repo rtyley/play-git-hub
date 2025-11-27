@@ -25,7 +25,7 @@ import com.madgag.github.AccessToken
 import com.madgag.github.apps.{GitHubAppAuth, GitHubAppJWTs, InstallationAccess}
 import com.madgag.scalagithub.commands.{Base64EncodedBytes, CreateOrUpdateFile, DeleteFile}
 import com.madgag.scalagithub.model.PullRequest
-import com.madgag.scalagithub.model.PullRequest.BranchSpec
+import com.madgag.scalagithub.model.PullRequest.{BranchSpec, Metadata}
 import com.madgag.scalagithub.model.Repo.PullRequests.SingleCommitAction.deleteFile
 import com.madgag.scalagithub.{ClientWithAccess, GitHub, GitHubAppAccess}
 import org.scalatest.OptionValues
@@ -67,7 +67,7 @@ object GitHubWithTestRepoTest extends IOSuite with OptionValues {
       val prText = PullRequest.Text("My title", "My description")
       for {
         repo <- testRepoCreation.createTestRepo(pathForResource("/small-example.git.zip", getClass))
-        pr <- repo.pullRequests.create(branch = "my-branch", prText, deleteFile("foo"))
+        pr <- repo.pullRequests.create(prText, labels = Set("my-label"), branch = "my-branch")(deleteFile("foo"))
       } yield expect(clue(pr.text) == prText) //
     }
   }

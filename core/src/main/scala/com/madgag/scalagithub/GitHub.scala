@@ -140,7 +140,12 @@ class GitHub(val gitHubHttp: GitHubHttp) {
     response => readAndResolve[T](req, response)
   }
 
-  def create[CC : Writes, Res: Reads](uri: Uri, cc: CC) : FR[Res] = executeAndReadJson[Res](reqWithBody(cc).post(uri))
+  /**
+   * 'POST' typically means 'Create' in the GitHub API, but can also mean 'Add' in the case of labels
+   * 
+   * https://docs.github.com/en/rest/issues/labels?apiVersion=2022-11-28#add-labels-to-an-issue
+   */
+  def post[CC : Writes, Res: Reads](uri: Uri, cc: CC) : FR[Res] = executeAndReadJson[Res](reqWithBody(cc).post(uri))
 
   def put[CC : Writes, Res: Reads](uri: Uri, cc: CC) : FR[Res] = executeAndReadJson[Res](reqWithBody(cc).put(uri))
 
@@ -168,12 +173,12 @@ class GitHub(val gitHubHttp: GitHubHttp) {
   /**
     * https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#create-a-repository-for-the-authenticated-user
     */
-  def createRepo(repo: CreateRepo): FR[Repo] = create(path("user", "repos"), repo)
+  def createRepo(repo: CreateRepo): FR[Repo] = post(path("user", "repos"), repo)
 
   /**
     * https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#create-an-organization-repository
     */
-  def createOrgRepo(org: String, repo: CreateRepo): FR[Repo] = create(path("orgs", org, "repos"), repo)
+  def createOrgRepo(org: String, repo: CreateRepo): FR[Repo] = post(path("orgs", org, "repos"), repo)
 
   /**
     * https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#get-a-repository
@@ -205,7 +210,7 @@ class GitHub(val gitHubHttp: GitHubHttp) {
     * PUT /repos/{owner}/{repo}/contents/{path}
     */
   def createFile(repo: Repo, path: String, createFile: CreateOrUpdateFile): FR[ContentCommit] =
-    create(repo.contents.urlFor(path), createFile)
+    post(repo.contents.urlFor(path), createFile)
 
   /**
     * https://docs.github.com/en/rest/git/trees?apiVersion=2022-11-28#get-a-tree
@@ -343,7 +348,7 @@ class GitHub(val gitHubHttp: GitHubHttp) {
    * POST /repos/{owner}/{repo}/issues/{issue_number}/comments
    */
   def createComment(commentable: Commentable, comment: String): FR[Comment] =
-    create(Uri.unsafeParse(commentable.comments_url), CreateComment(comment))
+    post(Uri.unsafeParse(commentable.comments_url), CreateComment(comment))
 
   /**
     * https://docs.github.com/en/rest/issues/comments?apiVersion=2022-11-28#list-issue-comments
